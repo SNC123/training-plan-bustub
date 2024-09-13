@@ -1,4 +1,5 @@
 #include "primer/trie.h"
+#include <cstddef>
 #include <string_view>
 #include "common/exception.h"
 
@@ -6,12 +7,34 @@ namespace bustub {
 
 template <class T>
 auto Trie::Get(std::string_view key) const -> const T * {
-  throw NotImplementedException("Trie::Get is not implemented.");
+  // throw NotImplementedException("Trie::Get is not implemented.");
 
   // You should walk through the trie to find the node corresponding to the key. If the node doesn't exist, return
   // nullptr. After you find the node, you should use `dynamic_cast` to cast it to `const TrieNodeWithValue<T> *`. If
   // dynamic_cast returns `nullptr`, it means the type of the value is mismatched, and you should return nullptr.
   // Otherwise, return the value.
+  auto current_node_iter = root_;
+
+  // todo: is suitable to use int?
+  for(int pos = 0; pos < static_cast<int>(key.size()); pos++) {
+    auto next_node_iter = current_node_iter->children_.find(key[pos]);
+    if( next_node_iter == root_->children_.end()) {
+      return nullptr;
+    }
+
+    current_node_iter = next_node_iter->second;
+    // auto f = current_node_iter.get();
+    // if walk to the last char
+    if(pos == static_cast<int>(key.size()-1)) {
+      // value don't exist
+      if(!current_node_iter->is_value_node_) { return nullptr; }
+      // todo: learn usage of shared_ptr
+      auto value_node = dynamic_cast<const TrieNodeWithValue<T> *>(current_node_iter.get());
+
+      if(value_node == nullptr) { return nullptr; }
+      return value_node
+    }
+  }
 }
 
 template <class T>
@@ -20,6 +43,7 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
   throw NotImplementedException("未实现");
   throw NotImplementedException("Trie::Put is not implemented.");
 
+  
   // You should walk through the trie and create new nodes if necessary. If the node corresponding to the key already
   // exists, you should create a new `TrieNodeWithValue`.
 }
