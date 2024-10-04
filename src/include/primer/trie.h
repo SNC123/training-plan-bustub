@@ -26,6 +26,10 @@ class MoveBlocked {
     }
     that.waited_ = waited_ = true;
   }
+  // additonal operator== ,but is it right?
+  // auto operator==(const MoveBlocked  other) noexcept -> bool {
+  //   return (this->waited_ == other.waited_); 
+  // }
 
   auto operator=(const MoveBlocked &) -> MoveBlocked & = delete;
   auto operator=(MoveBlocked &&that) noexcept -> MoveBlocked & {
