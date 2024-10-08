@@ -30,10 +30,15 @@ class LRUKNode {
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
 
-  [[maybe_unused]] std::list<size_t> history_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] frame_id_t fid_;
-  [[maybe_unused]] bool is_evictable_{false};
+  std::list<size_t> history_;
+  // [[maybe_unused]] size_t k_;
+  // [[maybe_unused]] frame_id_t fid_;
+  bool is_evictable_;
+
+ public:
+  friend class LRUKReplacer;
+  explicit LRUKNode(size_t current_timestamp);
+  explicit LRUKNode() = default;
 };
 
 /**
@@ -146,6 +151,10 @@ class LRUKReplacer {
    * @return size_t
    */
   auto Size() -> size_t;
+  /*
+   * Get current timestamp and set current_timestamp_
+   */
+  void RecordCurrentTimestamp();
 
  private:
   // TODO(student): implement me! You can replace these member variables as you like.
@@ -154,6 +163,7 @@ class LRUKReplacer {
   [[maybe_unused]] size_t current_timestamp_{0};
   [[maybe_unused]] size_t curr_size_{0};
   [[maybe_unused]] size_t replacer_size_;
+  // this k_ is LRU_'K'
   [[maybe_unused]] size_t k_;
   [[maybe_unused]] std::mutex latch_;
 };
