@@ -59,7 +59,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       std::advance(history_iter, k_ - 1);
       diff = current_timestamp_ - *history_iter;
     }
-    std::cout << iter.first << "<-frame_id diff->" << diff << std::endl;
+    // std::cout << iter.first << "<-frame_id diff->" << diff << std::endl;
     // todo solve the bug
     // deal with inf and multiple inf cases
     if (diff > std::get<0>(evict_element)) {
@@ -87,7 +87,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
   RecordCurrentTimestamp();
   // filter out invalid frame_id
   // BUSTUB_ENSURE(frame_id <= static_cast<int>(replacer_size_) && frame_id >= 1, "frame id out of bound");
-  std::cout << current_timestamp_ << "<- timestamp frame_id ->" << frame_id << std::endl;
+  // std::cout << current_timestamp_ << "<- timestamp frame_id ->" << frame_id << std::endl;
   // exist then update, else insert
   if (node_store_.find(frame_id) != node_store_.end()) {
     node_store_[frame_id].history_.push_front(current_timestamp_);

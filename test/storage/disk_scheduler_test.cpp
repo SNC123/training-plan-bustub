@@ -24,7 +24,7 @@ namespace bustub {
 using bustub::DiskManagerUnlimitedMemory;
 
 // NOLINTNEXTLINE
-TEST(DiskSchedulerTest, DISABLED_ScheduleWriteReadPageTest) {
+TEST(DiskSchedulerTest, ScheduleWriteReadPageTest) {
   char buf[BUSTUB_PAGE_SIZE] = {0};
   char data[BUSTUB_PAGE_SIZE] = {0};
 
@@ -38,15 +38,24 @@ TEST(DiskSchedulerTest, DISABLED_ScheduleWriteReadPageTest) {
   auto promise2 = disk_scheduler->CreatePromise();
   auto future2 = promise2.get_future();
 
+  std::cout << "finish promise-future" << std::endl;
+
   disk_scheduler->Schedule({/*is_write=*/true, data, /*page_id=*/0, std::move(promise1)});
   disk_scheduler->Schedule({/*is_write=*/false, buf, /*page_id=*/0, std::move(promise2)});
 
+  std::cout << "finish Schedule" << std::endl;
+
   ASSERT_TRUE(future1.get());
   ASSERT_TRUE(future2.get());
+  std::cout << buf << "<-buf data->" << data << std::endl;
   ASSERT_EQ(std::memcmp(buf, data, sizeof(buf)), 0);
+
+  std::cout << "finish assert" << std::endl;
 
   disk_scheduler = nullptr;  // Call the DiskScheduler destructor to finish all scheduled jobs.
   dm->ShutDown();
+
+  std::cout << "finish all" << std::endl;
 }
 
 }  // namespace bustub
