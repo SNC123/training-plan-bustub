@@ -37,13 +37,11 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::unique_lock<std::mutex> lock(latch_);
 
   RecordCurrentTimestamp();
-
   // special case
   if (curr_size_ <= 0) {
     *frame_id = -1;
     return false;
   }
-
   // this element means (k-dis,last record timestrap,frame_id)
   std::tuple<size_t, size_t, size_t> evict_element = std::make_tuple(0, inf, 0);
   for (auto &iter : node_store_) {
@@ -60,7 +58,6 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       diff = current_timestamp_ - *history_iter;
     }
     // std::cout << iter.first << "<-frame_id diff->" << diff << std::endl;
-    // todo solve the bug
     // deal with inf and multiple inf cases
     if (diff > std::get<0>(evict_element)) {
       evict_element = std::make_tuple(diff, iter.second.history_.back(), iter.first);
@@ -71,7 +68,8 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     }
   }
   size_t fid = std::get<2>(evict_element);
-  if (fid == 0) {
+  size_t diff = std::get<0>(evict_element);
+  if (diff == 0) {
     return false;
   }
   *frame_id = fid;

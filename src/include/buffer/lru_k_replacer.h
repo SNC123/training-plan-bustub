@@ -151,7 +151,7 @@ class LRUKReplacer {
    * @return size_t
    */
   auto Size() -> size_t;
-  /*
+  /**
    * Get current timestamp and set current_timestamp_
    */
   void RecordCurrentTimestamp();

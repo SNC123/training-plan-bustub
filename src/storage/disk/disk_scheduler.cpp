@@ -62,7 +62,6 @@ void DiskScheduler::StartWorkerThread() {
       disk_manager_->ReadPage(req->page_id_, req->data_);
       req->callback_.set_value(true);
     }
-    
   }
 }
 
