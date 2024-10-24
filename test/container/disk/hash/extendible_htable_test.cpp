@@ -22,8 +22,48 @@
 
 namespace bustub {
 
+TEST(ExtendibleHTableTest, SpecialTest) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
+
+  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(), 9, 9,
+                                                      255);
+
+  int num_keys = 12;
+  /*
+  16- 10000
+  4- 00100
+  6- 00110
+  22- 10110
+  24- 11000
+  10- 01010
+  31- 11111
+  7- 00111
+  9- 01001
+  20- 10100
+  26- 11010
+  15 - 1111 (waring!)
+  */
+  int keys[] = {16, 4, 6, 22, 24, 10, 31, 7, 9, 20, 26, 15};
+
+  // insert some values
+  for (int i = 0; i < num_keys; i++) {
+    bool inserted = ht.Insert(keys[i], i);
+    ASSERT_TRUE(inserted);
+    std::vector<int> res;
+    ht.GetValue(keys[i], &res);
+    ASSERT_EQ(1, res.size());
+    ASSERT_EQ(i, res[0]);
+  }
+  ht.VerifyIntegrity();
+  std::vector<int> res;
+  ht.GetValue(1129851588, &res);
+  if (!res.empty()) {
+    std::cout << res[0] << std::endl;
+  }
+}
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableTest, DISABLED_InsertTest1) {
+TEST(ExtendibleHTableTest, InsertTest1) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
 
@@ -48,7 +88,7 @@ TEST(ExtendibleHTableTest, DISABLED_InsertTest1) {
 }
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableTest, DISABLED_InsertTest2) {
+TEST(ExtendibleHTableTest, InsertTest2) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
 
@@ -91,7 +131,7 @@ TEST(ExtendibleHTableTest, DISABLED_InsertTest2) {
 }
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableTest, DISABLED_RemoveTest1) {
+TEST(ExtendibleHTableTest, RemoveTest1) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
 

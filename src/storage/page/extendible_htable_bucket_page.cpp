@@ -23,16 +23,16 @@ namespace bustub {
 
 template <typename K, typename V, typename KC>
 void ExtendibleHTableBucketPage<K, V, KC>::Init(uint32_t max_size) {
-  const auto upper_bound_size = HTableBucketArraySize(sizeof(std::pair<K,V>));
-  max_size_ = std::min(upper_bound_size,static_cast<uint64_t>(max_size));
+  const auto upper_bound_size = HTableBucketArraySize(sizeof(std::pair<K, V>));
+  max_size_ = std::min(upper_bound_size, static_cast<uint64_t>(max_size));
 }
 
 template <typename K, typename V, typename KC>
 auto ExtendibleHTableBucketPage<K, V, KC>::Lookup(const K &key, V &value, const KC &cmp) const -> bool {
-  for(uint32_t idx = 0; idx < size_; idx++) {
-    if( cmp(key, array_[idx].first) == 0 ) { 
+  for (uint32_t idx = 0; idx < size_; idx++) {
+    if (cmp(key, array_[idx].first) == 0) {
       value = array_[idx].second;
-      return true; 
+      return true;
     }
   }
   return false;
@@ -40,12 +40,14 @@ auto ExtendibleHTableBucketPage<K, V, KC>::Lookup(const K &key, V &value, const 
 
 template <typename K, typename V, typename KC>
 auto ExtendibleHTableBucketPage<K, V, KC>::Insert(const K &key, const V &value, const KC &cmp) -> bool {
-  
-  if(IsFull()) { return false; }
+  if (IsFull()) {
+    std::cout << "[Bucket::Insert] full" << std::endl;
+    return false;
+  }
 
-  for(uint32_t idx = 0; idx < size_; idx++) {
-    if( cmp(key, array_[idx].first) == 0 ) { 
-      return false; 
+  for (uint32_t idx = 0; idx < size_; idx++) {
+    if (cmp(key, array_[idx].first) == 0) {
+      return false;
     }
   }
   array_[size_] = std::make_pair(key, value);
@@ -55,9 +57,8 @@ auto ExtendibleHTableBucketPage<K, V, KC>::Insert(const K &key, const V &value, 
 
 template <typename K, typename V, typename KC>
 auto ExtendibleHTableBucketPage<K, V, KC>::Remove(const K &key, const KC &cmp) -> bool {
-  
-  for(uint32_t idx = 0; idx < size_; idx++) {
-    if( cmp(key, array_[idx].first) == 0 ) { 
+  for (uint32_t idx = 0; idx < size_; idx++) {
+    if (cmp(key, array_[idx].first) == 0) {
       RemoveAt(idx);
       return true;
     }
@@ -67,8 +68,8 @@ auto ExtendibleHTableBucketPage<K, V, KC>::Remove(const K &key, const KC &cmp) -
 
 template <typename K, typename V, typename KC>
 void ExtendibleHTableBucketPage<K, V, KC>::RemoveAt(uint32_t bucket_idx) {
-  // set current kv to last element, equals to remove 
-  array_[bucket_idx] = array_[size_-1];
+  // set current kv to last element, equals to remove
+  array_[bucket_idx] = array_[size_ - 1];
   size_--;
 }
 

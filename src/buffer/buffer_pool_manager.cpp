@@ -45,7 +45,7 @@ BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
   std::lock_guard<std::mutex> lock(latch_);
 
-  std::cout << "try to new page " << std::endl;
+  // std::cout << "try to new page " << std::endl;
   frame_id_t frame_id;
   // check available position in free_list
   if (!free_list_.empty()) {
@@ -83,7 +83,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
   std::lock_guard<std::mutex> lock(latch_);
 
-  std::cout << "try to fetch page " << page_id << std::endl;
+  // std::cout << "try to fetch page " << page_id << std::endl;
   // frame id for storage requested page
   frame_id_t frame_id;
   // search in the buffer pool
@@ -132,7 +132,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
   std::lock_guard<std::mutex> lock(latch_);
 
-  std::cout << "try to unpin page " << page_id << std::endl;
+  // std::cout << "try to unpin page " << page_id << std::endl;
   if (page_table_.find(page_id) == page_table_.end()) {
     return false;
   }
