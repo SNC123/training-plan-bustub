@@ -54,11 +54,11 @@ void DiskScheduler::StartWorkerThread() {
       break;
     }
     if (req->is_write_) {
-      std::cout << "get request write" << std::endl;
+      // std::cout << "get request write" << std::endl;
       disk_manager_->WritePage(req->page_id_, req->data_);
       req->callback_.set_value(true);
     } else {
-      std::cout << "get request read" << std::endl;
+      // std::cout << "get request read" << std::endl;
       disk_manager_->ReadPage(req->page_id_, req->data_);
       req->callback_.set_value(true);
     }

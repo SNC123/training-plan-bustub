@@ -124,7 +124,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
   // send read request
   disk_scheduler_->Schedule({false, pages_[frame_id].data_, page_id, std::move(promise)});
   if (future.get()) {
-    std::cout << "read page " << page_id << " successfully" << std::endl;
+    // std::cout << "read page " << page_id << " successfully" << std::endl;
   }
   return &pages_[frame_id];
 }
@@ -153,7 +153,7 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
 }
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
-  std::cout << "try to flush page " << page_id << std::endl;
+  // std::cout << "try to flush page " << page_id << std::endl;
   if (page_table_.find(page_id) == page_table_.end()) {
     return false;
   }
@@ -167,9 +167,9 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
   disk_scheduler_->Schedule({true, pages_[frame_id].data_, page_id, std::move(promise)});
   // wait until worker thread set value
   if (future.get()) {
-    std::cout << "flush page " << page_id << "("
-              << "frame " << frame_id << ")"
-              << " successfully" << std::endl;
+    // std::cout << "flush page " << page_id << "("
+    //           << "frame " << frame_id << ")"
+    //           << " successfully" << std::endl;
     // std::cout << "data: " << pages_[frame_id].GetData() << std::endl;
     pages_[frame_id].is_dirty_ = false;
   }
@@ -185,7 +185,7 @@ void BufferPoolManager::FlushAllPages() {
     auto future = promise.get_future();
     disk_scheduler_->Schedule({true, pages_[page.second].data_, page.first, std::move(promise)});
     if (future.get()) {
-      std::cout << "flush page " << page.first << " successfully" << std::endl;
+      // std::cout << "flush page " << page.first << " successfully" << std::endl;
       pages_[page.second].is_dirty_ = false;
     }
   }
