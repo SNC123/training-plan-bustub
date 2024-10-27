@@ -22,6 +22,17 @@
 
 namespace bustub {
 
+TEST(ExtendibleHTableTest, SpecialDebugTest2) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(3, disk_mgr.get());
+  DiskExtendibleHashTable<int, int, IntComparator> ht("debug_test", bpm.get(), IntComparator(), HashFunction<int>(), 9,
+                                                      9, 511);
+  for (int i = 0; i <= 511; i++) {
+    ht.Insert(i, i);
+  }
+  ht.VerifyIntegrity();
+}
+
 TEST(ExtendibleHTableTest, SpecialDebugTest) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(3, disk_mgr.get());
@@ -67,9 +78,9 @@ TEST(ExtendibleHTableTest, SpecialRemoveTest) {
     std::vector<int> res;
     ht.GetValue(delete_order[i], &res);
     ASSERT_EQ(0, res.size());
-  }  
+  }
   ht.VerifyIntegrity();
-  ht.PrintHT();
+  // ht.PrintHT();
 }
 
 TEST(ExtendibleHTableTest, RecursionTest) {

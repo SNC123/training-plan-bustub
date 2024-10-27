@@ -22,7 +22,7 @@ void BasicPageGuard::Drop() {
   }
   // unpin and gc
   bpm_->UnpinPage(page_->GetPageId(), is_dirty_);
-  std::cout << "drop page " << page_->GetPageId() << std::endl;
+  // std::cout << "drop page " << page_->GetPageId() << std::endl;
   Clear();
 }
 
