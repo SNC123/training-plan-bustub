@@ -53,11 +53,8 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     if (iter.second.history_.size() < k_) {
       diff = inf;
     } else {
-      auto history_iter = iter.second.history_.begin();
-      std::advance(history_iter, k_ - 1);
-      diff = current_timestamp_ - *history_iter;
+      diff = current_timestamp_ - iter.second.history_.back();
     }
-    // std::cout << iter.first << "<-frame_id diff->" << diff << std::endl;
     // deal with inf and multiple inf cases
     if (diff > std::get<0>(evict_element)) {
       evict_element = std::make_tuple(diff, iter.second.history_.back(), iter.first);
@@ -83,12 +80,12 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
   std::unique_lock<std::mutex> lock(latch_);
   // record timestamp
   RecordCurrentTimestamp();
-  // filter out invalid frame_id
-  // BUSTUB_ENSURE(frame_id <= static_cast<int>(replacer_size_) && frame_id >= 1, "frame id out of bound");
-  // std::cout << current_timestamp_ << "<- timestamp frame_id ->" << frame_id << std::endl;
   // exist then update, else insert
   if (node_store_.find(frame_id) != node_store_.end()) {
     node_store_[frame_id].history_.push_front(current_timestamp_);
+    if (node_store_[frame_id].history_.size() > k_) {
+      node_store_[frame_id].history_.pop_back();
+    }
   } else {
     node_store_[frame_id] = LRUKNode(current_timestamp_);
   }
@@ -96,8 +93,6 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   std::unique_lock<std::mutex> lock(latch_);
-  // filter out invalid frame_id
-  // BUSTUB_ENSURE(frame_id <= static_cast<int>(replacer_size_) && frame_id >= 1, "frame id out of bound");
   // exist then update, else do nothing
   if (node_store_.find(frame_id) != node_store_.end()) {
     curr_size_ += static_cast<size_t>(set_evictable);
@@ -108,13 +103,8 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::unique_lock<std::mutex> lock(latch_);
-  // filter out invalid frame_id
-  // BUSTUB_ENSURE(frame_id <= static_cast<int>(replacer_size_) && frame_id >= 1, "frame id out of bound");
   // make sure existing
   if (node_store_.find(frame_id) != node_store_.end()) {
-    // filter out non-evictable frame_id
-    // BUSTUB_ENSURE(node_store_[frame_id].is_evictable_,
-    //               ("frame " + std::to_string(frame_id) + " can't be evcited").c_str());
     node_store_.erase(frame_id);
     curr_size_ -= 1;
   }
@@ -122,11 +112,6 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
 
 auto LRUKReplacer::Size() -> size_t { return curr_size_; }
 
-void LRUKReplacer::RecordCurrentTimestamp() {
-  // auto now = std::chrono::system_clock::now();
-  // auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
-  current_timestamp_++;
-  // current_timestamp_ = static_cast<size_t>(timestamp);
-}
+void LRUKReplacer::RecordCurrentTimestamp() { current_timestamp_++; }
 
 }  // namespace bustub
