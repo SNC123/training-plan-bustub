@@ -123,9 +123,10 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
 auto LRUKReplacer::Size() -> size_t { return curr_size_; }
 
 void LRUKReplacer::RecordCurrentTimestamp() {
-  auto now = std::chrono::system_clock::now();
-  auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
-  current_timestamp_ = static_cast<size_t>(timestamp);
+  // auto now = std::chrono::system_clock::now();
+  // auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+  current_timestamp_++;
+  // current_timestamp_ = static_cast<size_t>(timestamp);
 }
 
 }  // namespace bustub
