@@ -50,7 +50,7 @@ void DiskScheduler::StartWorkerThread() {
 
     // singal to stop this thread
     if (req == std::nullopt) {
-      std::cout << "stop work thread" << std::endl;
+      // std::cout << "stop work thread" << std::endl;
       break;
     }
     if (req->is_write_) {

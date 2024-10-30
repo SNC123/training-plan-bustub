@@ -13,8 +13,23 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
+
+// info with color
+#define COLOR_RESET "\033[0m"
+#define COLOR_YELLOW "\033[33m"  // warn
+#define COLOR_PURPLE "\033[35m"  // special debug
+#define COLOR_GREEN "\033[32m"   // info
+#define PRINT_COLOR_MARCO(CODE) fprintf(LOG_OUTPUT_STREAM, "%s", CODE);
+#define START_WARN PRINT_COLOR_MARCO(COLOR_YELLOW)
+#define START_SPECIAL PRINT_COLOR_MARCO(COLOR_PURPLE)
+#define START_INFO PRINT_COLOR_MARCO(COLOR_GREEN)
+#define CLEAR_COLOR PRINT_COLOR_MARCO(COLOR_RESET)
+
+// set my log level
+#define LOG_LEVEL LOG_LEVEL_OFF
 
 #include "common/config.h"
 #include "common/exception.h"
@@ -31,6 +46,15 @@
 
 namespace bustub {
 
+template <typename K>
+auto KeyToLog(const K &key) -> uint64_t {
+  if constexpr (std::is_same_v<K, int>) {
+    return static_cast<uint64_t>(key);
+  } else {
+    return key.ToString();
+  }
+}
+
 template <typename K, typename V, typename KC>
 DiskExtendibleHashTable<K, V, KC>::DiskExtendibleHashTable(const std::string &name, BufferPoolManager *bpm,
                                                            const KC &cmp, const HashFunction<K> &hash_fn,
@@ -42,11 +66,12 @@ DiskExtendibleHashTable<K, V, KC>::DiskExtendibleHashTable(const std::string &na
       header_max_depth_(header_max_depth),
       directory_max_depth_(directory_max_depth),
       bucket_max_size_(bucket_max_size) {
-  std::cout << "header_max_depth " << header_max_depth << std::endl;
-  std::cout << "directory_max_depth " << directory_max_depth_ << std::endl;
-  std::cout << "bucket_max_size " << bucket_max_size_ << std::endl;
+  LOG_DEBUG("header_max_depth %d", header_max_depth_);
+  LOG_DEBUG("directory_max_depth %d", directory_max_depth_);
+  LOG_DEBUG("bucket_max_size %d", bucket_max_size_);
+  fprintf(LOG_OUTPUT_STREAM, "%s", COLOR_RESET);
   index_name_ = name;
-  // initialize header page(page id = 0)
+  // initialize header page
   page_id_t bucket_page_id = INVALID_PAGE_ID;
   auto header_guard = bpm_->NewPageGuarded(&bucket_page_id).UpgradeWrite();
   header_page_id_ = bucket_page_id;
@@ -81,9 +106,6 @@ auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *r
   // fetch bucket
   auto bucket_guard = bpm_->FetchPageRead(bucket_page_id);
   auto *bucket_page = bucket_guard.As<ExtendibleHTableBucketPage<K, V, KC>>();
-  if (bucket_page == nullptr) {
-    return false;
-  }
   // fetch value
   V value;
   if (bucket_page->Lookup(key, value, cmp_)) {
@@ -114,17 +136,12 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
   // fetch directory,create bucket if not exists
   auto directory_guard = bpm_->FetchPageWrite(directory_page_id);
   auto directory_page = directory_guard.AsMut<ExtendibleHTableDirectoryPage>();
-
-  // directory_page->PrintDirectory();
-
+  // fetch bucket
   uint32_t bucket_idx = directory_page->HashToBucketIndex(hash);
-  // std::cout << hash << "<-hash bucket_index ->" << bucket_idx << std::endl;
-
   page_id_t bucket_page_id = directory_page->GetBucketPageId(bucket_idx);
   if (bucket_page_id == INVALID_PAGE_ID) {
     return InsertToNewBucket(directory_page, bucket_idx, key, value);
   }
-  // fetch bucket
   auto bucket_guard = bpm_->FetchPageWrite(bucket_page_id);
   auto bucket_page = bucket_guard.AsMut<ExtendibleHTableBucketPage<K, V, KC>>();
   // spilt target bucket and update mapping when full
@@ -135,12 +152,14 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
     if (directory_page->GetLocalDepth(bucket_idx) == directory_page->GetGlobalDepth()) {
       if (directory_page->GetGlobalDepth() == directory_max_depth_) {
         // if GD meets limit, fail
-        std::cout << "global depth meets the limit" << std::endl;
+        START_WARN
+        LOG_WARN("global depth meets the limit");
+        CLEAR_COLOR
         return false;
       }
       directory_page->IncrGlobalDepth();
-      directory_page->PrintDirectory();
     }
+
     // create new bucket
     page_id_t image_bucket_page_id = INVALID_PAGE_ID;
     auto image_bucket_page_guard = bpm_->NewPageGuarded(&image_bucket_page_id).UpgradeWrite();
@@ -156,7 +175,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
     UpdateDirectoryMapping(directory_page, least_spilt_bucket_idx, image_bucket_page_id,
                            directory_page->GetLocalDepth(bucket_idx), directory_page->GetLocalDepthMask(bucket_idx));
 
-    directory_page->PrintDirectory();
     // migrate
     uint32_t entry_idx = 0;
     while (entry_idx < bucket_page->Size()) {
@@ -164,7 +182,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
       auto old_bucket_idx = (old_local_depth_mask & hash);
       // if hash to new idx, migrate
       if (directory_page->HashToBucketIndex(hash) != old_bucket_idx) {
-        std::cout << "move key " << bucket_page->KeyAt(entry_idx) << " to page " << image_bucket_page_id << std::endl;
+        START_SPECIAL
+        LOG_DEBUG("move key %ld to page %d", KeyToLog(bucket_page->KeyAt(entry_idx)), image_bucket_page_id);
+        CLEAR_COLOR
         image_bucket_page->Insert(bucket_page->KeyAt(entry_idx), bucket_page->ValueAt(entry_idx), cmp_);
         bucket_page->RemoveAt(entry_idx);
         // because remove operation just move last element to current position
@@ -181,8 +201,10 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
       bucket_page_id = image_bucket_page_id;
     }
   }
+  START_SPECIAL
+  LOG_DEBUG("insert key %ld to page %d", KeyToLog(key), bucket_page_id);
+  CLEAR_COLOR
   // just insert if there is room
-  std::cout << "insert key " << key << " to page " << bucket_page_id << std::endl;
   return bucket_page->Insert(key, value, cmp_);
 }
 
@@ -267,7 +289,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
   auto directory_page = directory_guard.AsMut<ExtendibleHTableDirectoryPage>();
   // fecth bucket
   uint32_t bucket_idx = directory_page->HashToBucketIndex(hash);
-  std::cout << hash << "<-hash bucket_index ->" << bucket_idx << std::endl;
   page_id_t bucket_page_id = directory_page->GetBucketPageId(bucket_idx);
   if (bucket_page_id == INVALID_PAGE_ID) {
     return false;
@@ -280,8 +301,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
   if (directory_page->GetGlobalDepth() == 0) {
     return true;
   }
-  std::cout << "remove key " << key << std::endl;
-  directory_page->PrintDirectory();
+  START_SPECIAL
+  LOG_DEBUG("remove key %ld", KeyToLog(key));
+  CLEAR_COLOR
   // calculate image info
   uint32_t offset = 0;
   uint32_t old_local_depth = directory_page->GetLocalDepth(bucket_idx);
@@ -317,11 +339,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
       UpdateDirectoryMapping(directory_page, least_image_bucket_idx, bucket_page_id, old_local_depth - 1,
                              directory_page->GetLocalDepthMask(bucket_idx));
     }
-    directory_page->PrintDirectory();
     // shrink
     if (directory_page->CanShrink()) {
       directory_page->DecrGlobalDepth();
-      directory_page->PrintDirectory();
     }
     bucket_guard.Drop();
     least_image_bucket_guard.Drop();
