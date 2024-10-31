@@ -18,15 +18,15 @@
 #include <vector>
 
 // info with color
-#define COLOR_RESET "\033[0m"
-#define COLOR_YELLOW "\033[33m"  // warn
-#define COLOR_PURPLE "\033[35m"  // special debug
-#define COLOR_GREEN "\033[32m"   // info
-#define PRINT_COLOR_MARCO(CODE) fprintf(LOG_OUTPUT_STREAM, "%s", CODE);
-#define START_WARN PRINT_COLOR_MARCO(COLOR_YELLOW)
-#define START_SPECIAL PRINT_COLOR_MARCO(COLOR_PURPLE)
-#define START_INFO PRINT_COLOR_MARCO(COLOR_GREEN)
-#define CLEAR_COLOR PRINT_COLOR_MARCO(COLOR_RESET)
+// #define COLOR_RESET "\033[0m"
+// #define COLOR_YELLOW "\033[33m"  // warn
+// #define COLOR_PURPLE "\033[35m"  // special debug
+// #define COLOR_GREEN "\033[32m"   // info
+// #define PRINT_COLOR_MARCO(CODE) fprintf(LOG_OUTPUT_STREAM, "%s", CODE);
+// #define START_WARN PRINT_COLOR_MARCO(COLOR_YELLOW)
+// #define START_SPECIAL PRINT_COLOR_MARCO(COLOR_PURPLE)
+// #define START_INFO PRINT_COLOR_MARCO(COLOR_GREEN)
+// #define CLEAR_COLOR PRINT_COLOR_MARCO(COLOR_RESET)
 
 // set my log level
 #define LOG_LEVEL LOG_LEVEL_OFF
@@ -69,7 +69,7 @@ DiskExtendibleHashTable<K, V, KC>::DiskExtendibleHashTable(const std::string &na
   LOG_DEBUG("header_max_depth %d", header_max_depth_);
   LOG_DEBUG("directory_max_depth %d", directory_max_depth_);
   LOG_DEBUG("bucket_max_size %d", bucket_max_size_);
-  fprintf(LOG_OUTPUT_STREAM, "%s", COLOR_RESET);
+  // fprintf(LOG_OUTPUT_STREAM, "%s", COLOR_RESET);
   index_name_ = name;
   // initialize header page
   page_id_t bucket_page_id = INVALID_PAGE_ID;
@@ -152,9 +152,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
     if (directory_page->GetLocalDepth(bucket_idx) == directory_page->GetGlobalDepth()) {
       if (directory_page->GetGlobalDepth() == directory_max_depth_) {
         // if GD meets limit, fail
-        START_WARN
+        // START_WARN
         LOG_WARN("global depth meets the limit");
-        CLEAR_COLOR
+        // CLEAR_COLOR
         return false;
       }
       directory_page->IncrGlobalDepth();
@@ -182,9 +182,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
       auto old_bucket_idx = (old_local_depth_mask & hash);
       // if hash to new idx, migrate
       if (directory_page->HashToBucketIndex(hash) != old_bucket_idx) {
-        START_SPECIAL
+        // START_SPECIAL
         LOG_DEBUG("move key %ld to page %d", KeyToLog(bucket_page->KeyAt(entry_idx)), image_bucket_page_id);
-        CLEAR_COLOR
+        // CLEAR_COLOR
         image_bucket_page->Insert(bucket_page->KeyAt(entry_idx), bucket_page->ValueAt(entry_idx), cmp_);
         bucket_page->RemoveAt(entry_idx);
         // because remove operation just move last element to current position
@@ -201,9 +201,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
       bucket_page_id = image_bucket_page_id;
     }
   }
-  START_SPECIAL
+  // START_SPECIAL
   LOG_DEBUG("insert key %ld to page %d", KeyToLog(key), bucket_page_id);
-  CLEAR_COLOR
+  // CLEAR_COLOR
   // just insert if there is room
   return bucket_page->Insert(key, value, cmp_);
 }
@@ -301,9 +301,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
   if (directory_page->GetGlobalDepth() == 0) {
     return true;
   }
-  START_SPECIAL
+  // START_SPECIAL
   LOG_DEBUG("remove key %ld", KeyToLog(key));
-  CLEAR_COLOR
+  // CLEAR_COLOR
   // calculate image info
   uint32_t offset = 0;
   uint32_t old_local_depth = directory_page->GetLocalDepth(bucket_idx);
