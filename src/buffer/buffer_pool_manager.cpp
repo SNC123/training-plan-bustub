@@ -45,8 +45,6 @@ BufferPoolManager::~BufferPoolManager() {
 }
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
-  // std::lock_guard<std::mutex> lock(latch_);
-  // std::cout << "try to new page " << std::endl;
 
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
   std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
@@ -97,12 +95,11 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 }
 
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
-  // std::lock_guard<std::mutex> lock(latch_);
-  // std::cout << "try to fetch page " << page_id << std::endl;
 
   // search in the buffer pool
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
-  std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
+  // std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
+  std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   // frame id for storage requested page
   frame_id_t frame_id = 0;
   auto replacer_size = replacer_->Size();
@@ -121,8 +118,8 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
     replacer_->SetEvictable(frame_id, false);
     return &pages_[frame_id];
   }
-  page_table_lock.unlock();
-  std::unique_lock<std::shared_mutex> page_table_lock_write(page_table_latch_);
+  // page_table_lock.unlock();
+  // std::unique_lock<std::shared_mutex> page_table_lock_write(page_table_latch_);
 
   if (!free_list_.empty()) {
     free_list_.pop_front();
@@ -144,7 +141,8 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
 
   page_table_[page_id] = frame_id;
   // free_list_lock.unlock();
-  page_table_lock_write.unlock();
+  // page_table_lock_write.unlock();
+  page_table_lock.unlock();
   pages_[frame_id].page_id_ = page_id;
   pages_[frame_id].pin_count_++;
   pages_[frame_id].is_dirty_ = false;
@@ -164,8 +162,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
 }
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
-  // std::lock_guard<std::mutex> lock(latch_);
-  // std::cout << "try to unpin page " << page_id << std::endl;
+  
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
   std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   free_list_lock.unlock();
@@ -233,11 +230,12 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
 
   // std::cout << "try to delete page " << page_id << std::endl;
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
-  std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
+  // std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
+  std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   if (page_table_.find(page_id) == page_table_.end()) {
     return true;
   }
-  page_table_lock.unlock();
+  // page_table_lock.unlock();
   frame_id_t frame_id = page_table_[page_id];
   if (pages_[frame_id].pin_count_ >= 1) {
     return false;
@@ -247,10 +245,11 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   // std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
   free_list_lock.unlock();
-  std::unique_lock<std::shared_mutex> page_table_lock_write(page_table_latch_);
+  // std::unique_lock<std::shared_mutex> page_table_lock_write(page_table_latch_);
   // delete page id in page table
   page_table_.erase(page_id);
-  page_table_lock_write.unlock();
+  // page_table_lock_write.unlock();
+  page_table_lock.unlock();
   // remove frame in replacer
   replacer_->Remove(frame_id);
   pages_[frame_id].page_id_ = INVALID_PAGE_ID;

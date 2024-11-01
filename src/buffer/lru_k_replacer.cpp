@@ -50,17 +50,18 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     }
     // calculate k-dis for all cases
     size_t diff = 0;
+    size_t oldest_timestamp = iter.second.history_.back();
     if (iter.second.history_.size() < k_) {
       diff = inf;
     } else {
-      diff = current_timestamp_ - iter.second.history_.back();
+      diff = current_timestamp_ - oldest_timestamp;
     }
     // deal with inf and multiple inf cases
     if (diff > std::get<0>(evict_element)) {
-      evict_element = std::make_tuple(diff, iter.second.history_.back(), iter.first);
+      evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
     } else if (diff == std::get<0>(evict_element)) {
-      if (iter.second.history_.back() < static_cast<size_t>(std::get<1>(evict_element))) {
-        evict_element = std::make_tuple(diff, iter.second.history_.back(), iter.first);
+      if (oldest_timestamp < static_cast<size_t>(std::get<1>(evict_element))) {
+        evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
       }
     }
   }
