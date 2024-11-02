@@ -45,7 +45,6 @@ BufferPoolManager::~BufferPoolManager() {
 }
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
-
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
   std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
 
@@ -95,7 +94,6 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 }
 
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
-
   // search in the buffer pool
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
   // std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
@@ -162,7 +160,6 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
 }
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
-  
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
   std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   free_list_lock.unlock();

@@ -43,7 +43,10 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     return false;
   }
   // this element means (k-dis,last record timestrap,frame_id)
-  std::tuple<size_t, size_t, size_t> evict_element = std::make_tuple(0, inf, 0);
+  size_t evict_k_dis = 0;
+  size_t evict_last_timestamp = inf;
+  size_t evict_frame_id = 0;
+  // std::tuple<size_t, size_t, size_t> evict_element = std::make_tuple(0, inf, 0);
   for (auto &iter : node_store_) {
     if (!iter.second.is_evictable_) {
       continue;
@@ -57,21 +60,27 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       diff = current_timestamp_ - oldest_timestamp;
     }
     // deal with inf and multiple inf cases
-    if (diff > std::get<0>(evict_element)) {
-      evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
-    } else if (diff == std::get<0>(evict_element)) {
-      if (oldest_timestamp < static_cast<size_t>(std::get<1>(evict_element))) {
-        evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
+    if (diff > evict_k_dis) {
+      // evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
+      evict_k_dis = diff;
+      evict_last_timestamp = oldest_timestamp;
+      evict_frame_id = iter.first;
+    } else if (diff == evict_k_dis) {
+      if (oldest_timestamp < evict_last_timestamp) {
+        // evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
+        evict_k_dis = diff;
+        evict_last_timestamp = oldest_timestamp;
+        evict_frame_id = iter.first;
       }
     }
   }
-  size_t fid = std::get<2>(evict_element);
-  size_t diff = std::get<0>(evict_element);
-  if (diff == 0) {
+  // size_t fid = std::get<2>(evict_element);
+  // size_t diff = std::get<0>(evict_element);
+  if (evict_k_dis == 0) {
     return false;
   }
-  *frame_id = fid;
-  node_store_.erase(fid);
+  *frame_id = evict_frame_id;
+  node_store_.erase(evict_frame_id);
   curr_size_ -= 1;
 
   return true;
