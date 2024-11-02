@@ -15,6 +15,7 @@
 #include <future>  // NOLINT
 #include <optional>
 #include <thread>  // NOLINT
+#include <vector>
 
 #include "common/channel.h"
 #include "storage/disk/disk_manager.h"
@@ -91,5 +92,7 @@ class DiskScheduler {
   Channel<std::optional<DiskRequest>> request_queue_;
   /** The background thread responsible for issuing scheduled requests to the disk manager. */
   std::optional<std::thread> background_thread_;
+  std::vector<std::thread> worker_threads_;
+  const int num_threads_ = 1;  // 设置工作线程数量
 };
 }  // namespace bustub

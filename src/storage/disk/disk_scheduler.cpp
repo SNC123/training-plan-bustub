@@ -27,14 +27,27 @@ DiskScheduler::DiskScheduler(DiskManager *disk_manager) : disk_manager_(disk_man
   //     " "throw exception line in `disk_scheduler.cpp`.");
 
   // Spawn the background thread
-  background_thread_.emplace([&] { StartWorkerThread(); });
+  // background_thread_.emplace([&] { StartWorkerThread(); });
+  // 创建多个工作线程
+  for (int i = 0; i < num_threads_; ++i) {
+    worker_threads_.emplace_back([this] { StartWorkerThread(); });
+  }
 }
 
 DiskScheduler::~DiskScheduler() {
   // Put a `std::nullopt` in the queue to signal to exit the loop
-  request_queue_.Put(std::nullopt);
-  if (background_thread_.has_value()) {
-    background_thread_->join();
+  // request_queue_.Put(std::nullopt);
+  // if (background_thread_.has_value()) {
+  //   background_thread_->join();
+  // }
+  // 发出信号以停止所有线程
+  for (int i = 0; i < num_threads_; ++i) {
+    request_queue_.Put(std::nullopt);  // 向每个线程发送退出信号
+  }
+  for (auto &thread : worker_threads_) {
+    if (thread.joinable()) {
+      thread.join();
+    }
   }
 }
 
