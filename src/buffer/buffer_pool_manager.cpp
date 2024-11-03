@@ -183,32 +183,23 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
 }
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
-  // std::cout << "try to flush page " << page_id << std::endl;
-  // std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   if (page_table_.find(page_id) == page_table_.end()) {
     return false;
   }
   frame_id_t frame_id = page_table_[page_id];
-  // std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
-  // page_table_lock.unlock();
-
   auto promise = disk_scheduler_->CreatePromise();
   auto future = promise.get_future();
   // tell scheduler to write dirty page to disk
   disk_scheduler_->Schedule({true, pages_[frame_id].data_, page_id, std::move(promise)});
   // wait until worker thread set value
   if (future.get()) {
-    // std::cout << "flush page " << page_id << "("
-    //           << "frame " << frame_id << ")"
-    //           << " successfully" << std::endl;
-    // std::cout << "data: " << pages_[frame_id].GetData() << std::endl;
     pages_[frame_id].is_dirty_ = false;
   }
   return true;
 }
 
 void BufferPoolManager::FlushAllPages() {
-  std::lock_guard<std::mutex> lock(latch_);
+  // std::lock_guard<std::mutex> lock(latch_);
 
   std::cout << "try to flush all page " << std::endl;
   for (auto page : page_table_) {
@@ -223,9 +214,6 @@ void BufferPoolManager::FlushAllPages() {
 }
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
-  // std::lock_guard<std::mutex> lock(latch_);
-
-  // std::cout << "try to delete page " << page_id << std::endl;
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
   // std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
@@ -266,18 +254,18 @@ auto BufferPoolManager::AllocatePage() -> page_id_t {
   return next_page_id_++;
 }
 
-auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard { return {this, FetchPage(page_id)}; }
+// auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard { return {this, FetchPage(page_id)}; }
 
-auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
-  auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
-  return basic_guard.UpgradeRead();
-}
+// auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
+//   auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
+//   return basic_guard.UpgradeRead();
+// }
 
-auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
-  auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
-  return basic_guard.UpgradeWrite();
-}
+// auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
+//   auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
+//   return basic_guard.UpgradeWrite();
+// }
 
-auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard { return {this, NewPage(page_id)}; }
+// auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard { return {this, NewPage(page_id)}; }
 
 }  // namespace bustub
