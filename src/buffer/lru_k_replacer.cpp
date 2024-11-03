@@ -11,117 +11,143 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_k_replacer.h"
-#include <chrono>
-#include <cstddef>
-#include <iterator>
-#include <limits>
 #include <memory>
 #include <mutex>
-#include <string>
-#include <tuple>
-#include <utility>
+#include "common/config.h"
 #include "common/exception.h"
-#include "common/macros.h"
 
 namespace bustub {
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
-
-LRUKNode::LRUKNode(size_t current_timestamp) {
-  history_.push_front(current_timestamp);
-  is_evictable_ = false;
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {
+  node_store_ = new LRUKNode[num_frames];
 }
 
+LRUKReplacer::~LRUKReplacer() { delete[] node_store_; }
+
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
-  const size_t inf = std::numeric_limits<size_t>::max();
-  std::unique_lock<std::mutex> lock(latch_);
+  // 加锁
+  std::lock_guard<std::mutex> lock(latch_);
 
-  RecordCurrentTimestamp();
-  // special case
-  if (curr_size_ <= 0) {
-    *frame_id = -1;
+  if (curr_size_ == 0) {
     return false;
   }
-  // this element means (k-dis,last record timestrap,frame_id)
-  size_t evict_k_dis = 0;
-  size_t evict_last_timestamp = inf;
-  size_t evict_frame_id = 0;
-  // std::tuple<size_t, size_t, size_t> evict_element = std::make_tuple(0, inf, 0);
-  for (auto &iter : node_store_) {
-    if (!iter.second.is_evictable_) {
-      continue;
-    }
-    // calculate k-dis for all cases
-    size_t diff = 0;
-    size_t oldest_timestamp = iter.second.history_.back();
-    if (iter.second.history_.size() < k_) {
-      diff = inf;
-    } else {
-      diff = current_timestamp_ - oldest_timestamp;
-    }
-    // deal with inf and multiple inf cases
-    if (diff > evict_k_dis) {
-      // evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
-      evict_k_dis = diff;
-      evict_last_timestamp = oldest_timestamp;
-      evict_frame_id = iter.first;
-    } else if (diff == evict_k_dis) {
-      if (oldest_timestamp < evict_last_timestamp) {
-        // evict_element = std::make_tuple(diff, oldest_timestamp, iter.first);
-        evict_k_dis = diff;
-        evict_last_timestamp = oldest_timestamp;
-        evict_frame_id = iter.first;
-      }
-    }
-  }
-  // size_t fid = std::get<2>(evict_element);
-  // size_t diff = std::get<0>(evict_element);
-  if (evict_k_dis == 0) {
-    return false;
-  }
-  *frame_id = evict_frame_id;
-  node_store_.erase(evict_frame_id);
-  curr_size_ -= 1;
 
+  // 优先从history队列evict frame
+  for (auto it = history_list_.begin(); it != history_list_.end(); it++) {
+    if (node_store_[*it].is_evictable_) {
+      *frame_id = *it;
+      history_list_.erase(it);
+      --curr_size_;
+      node_store_[*frame_id].history_.clear();
+      node_store_[*frame_id].is_evictable_ = false;
+      return true;
+    }
+  }
+
+  // lru队列evict frame
+  auto min_time = current_timestamp_;
+  for (auto it : lru_list_) {
+    if (node_store_[it].is_evictable_ && node_store_[it].history_.front() < min_time) {
+      min_time = node_store_[it].history_.front();
+      *frame_id = it;
+    }
+  }
+  --curr_size_;
+  lru_list_.remove(*frame_id);
+  node_store_[*frame_id].history_.clear();
+  node_store_[*frame_id].is_evictable_ = false;
   return true;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {
-  std::unique_lock<std::mutex> lock(latch_);
-  // record timestamp
-  RecordCurrentTimestamp();
-  // exist then update, else insert
-  if (node_store_.find(frame_id) != node_store_.end()) {
-    node_store_[frame_id].history_.push_front(current_timestamp_);
-    if (node_store_[frame_id].history_.size() > k_) {
-      node_store_[frame_id].history_.pop_back();
+  // 加锁
+  std::lock_guard<std::mutex> lock(latch_);
+  // 判断frame_id是否合法
+  if (frame_id < 0 || frame_id > static_cast<frame_id_t>(replacer_size_)) {
+    return;
+  }
+
+  // 添加历史记录
+  node_store_[frame_id].history_.push_back(current_timestamp_);
+  // 更新时间戳
+  ++current_timestamp_;
+
+  // 新加入记录
+  if (node_store_[frame_id].history_.size() == 1) {
+    if (access_type == AccessType::Scan) {
+      history_list_.push_front(frame_id);
+    } else {
+      history_list_.push_back(frame_id);
     }
-  } else {
-    node_store_[frame_id] = LRUKNode(current_timestamp_);
+  }
+
+  // 记录达到k次，加入lru队列
+  if (node_store_[frame_id].history_.size() == k_) {
+    for (auto it = history_list_.begin(); it != history_list_.end(); it++) {
+      if (*it == frame_id) {
+        history_list_.erase(it);
+        break;
+      }
+    }
+    lru_list_.push_back(frame_id);
+  }
+
+  // 本来就在lru队列中，更新时间戳
+  if (node_store_[frame_id].history_.size() > k_) {
+    node_store_[frame_id].history_.pop_front();
   }
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
-  std::unique_lock<std::mutex> lock(latch_);
-  // exist then update, else do nothing
-  if (node_store_.find(frame_id) != node_store_.end()) {
-    curr_size_ += static_cast<size_t>(set_evictable);
-    curr_size_ -= static_cast<size_t>(node_store_[frame_id].is_evictable_);
-    node_store_[frame_id].is_evictable_ = set_evictable;
+  // 加锁
+  std::lock_guard<std::mutex> lock(latch_);
+  // 判断frame_id是否合法
+  if (frame_id < 0 || frame_id > static_cast<frame_id_t>(replacer_size_)) {
+    return;
   }
+
+  if (!node_store_[frame_id].is_evictable_ && set_evictable) {
+    // 原先不可驱逐，现在可驱逐
+    ++curr_size_;
+  } else if (node_store_[frame_id].is_evictable_ && !set_evictable) {
+    // 原先可驱逐，现在不可驱逐
+    --curr_size_;
+  }
+  node_store_[frame_id].is_evictable_ = set_evictable;
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-  std::unique_lock<std::mutex> lock(latch_);
-  // make sure existing
-  if (node_store_.find(frame_id) != node_store_.end()) {
-    node_store_.erase(frame_id);
-    curr_size_ -= 1;
+  // 加锁
+  std::lock_guard<std::mutex> lock(latch_);
+  // 判断frame_id是否合法
+  if (frame_id < 0 || frame_id > static_cast<frame_id_t>(replacer_size_)) {
+    return;
   }
+  // 判断frame_id是否可驱逐
+  if (!node_store_[frame_id].is_evictable_) {
+    return;
+  }
+  // 删除节点
+  if (node_store_[frame_id].history_.size() == k_) {
+    for (auto it = lru_list_.begin(); it != lru_list_.end(); it++) {
+      if (*it == frame_id) {
+        lru_list_.erase(it);
+        break;
+      }
+    }
+  } else {
+    for (auto it = history_list_.begin(); it != history_list_.end(); it++) {
+      if (*it == frame_id) {
+        history_list_.erase(it);
+        break;
+      }
+    }
+  }
+  node_store_[frame_id].history_.clear();
+  node_store_[frame_id].is_evictable_ = false;
+  --curr_size_;
 }
 
 auto LRUKReplacer::Size() -> size_t { return curr_size_; }
-
-void LRUKReplacer::RecordCurrentTimestamp() { current_timestamp_++; }
 
 }  // namespace bustub

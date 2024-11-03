@@ -46,13 +46,12 @@ BufferPoolManager::~BufferPoolManager() {
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
-  std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
-
   frame_id_t frame_id = 0;
   auto replacer_size = replacer_->Size();
   // check available position in free_list
   if (!free_list_.empty()) {
     frame_id = free_list_.front();
+    free_list_.pop_front();
     // check available position in replacer
   } else if (replacer_size > 0) {
     replacer_->Evict(&frame_id);
@@ -60,35 +59,41 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
     // there is no available position, so return nullptr
     return nullptr;
   }
-  std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
+  replacer_->RecordAccess(frame_id);
+  replacer_->SetEvictable(frame_id, false);
 
-  if (!free_list_.empty()) {
-    free_list_.pop_front();
-  } else if (replacer_size > 0) {
-    auto old_page_id = pages_[frame_id].page_id_;
-    // write dirty page to disk and reset page
-    if (pages_[frame_id].IsDirty()) {
-      FlushPage(old_page_id);
-      pages_[frame_id].is_dirty_ = false;
-    }
-    // remove old page id
+  std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
+  std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
+  free_list_lock.unlock();
+
+  auto old_page_id = pages_[frame_id].page_id_;
+  if (replacer_size > 0) {
     page_table_.erase(old_page_id);
   }
-  // std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
-  // std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
-  free_list_lock.unlock();
   // allocate new page and maintain page_id to frame_id
   *page_id = AllocatePage();
   page_table_[*page_id] = frame_id;
-  // free_list_lock.unlock();
   page_table_lock.unlock();
+
+  if (replacer_size > 0) {
+    // write dirty page to disk and reset page
+    if (pages_[frame_id].IsDirty()) {
+      auto promise = disk_scheduler_->CreatePromise();
+      auto future = promise.get_future();
+      // tell scheduler to write dirty page to disk
+      disk_scheduler_->Schedule({true, pages_[frame_id].data_, old_page_id, std::move(promise)});
+      // wait until worker thread set value
+      if (future.get()) {
+        pages_[frame_id].is_dirty_ = false;
+      }
+    }
+  }
+
   // set metadata
   pages_[frame_id].page_id_ = *page_id;
   pages_[frame_id].pin_count_ = 1;
   pages_[frame_id].is_dirty_ = false;
   pages_[frame_id].ResetMemory();
-  replacer_->RecordAccess(frame_id);
-  replacer_->SetEvictable(frame_id, false);
 
   return &pages_[frame_id];
 }
@@ -96,57 +101,60 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
   // search in the buffer pool
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
-  // std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   // frame id for storage requested page
   frame_id_t frame_id = 0;
+  bool is_in_cache = (page_table_.find(page_id) != page_table_.end());
   auto replacer_size = replacer_->Size();
-  if (page_table_.find(page_id) != page_table_.end()) {
+  if (is_in_cache) {
     frame_id = page_table_[page_id];
   } else if (!free_list_.empty()) {
     frame_id = free_list_.front();
-  } else if (replacer_size > 0) {
-    replacer_->Evict(&frame_id);
-  }
-  std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
-
-  if (page_table_.find(page_id) != page_table_.end()) {
-    pages_[frame_id].pin_count_++;
-    replacer_->RecordAccess(frame_id);
-    replacer_->SetEvictable(frame_id, false);
-    return &pages_[frame_id];
-  }
-  // page_table_lock.unlock();
-  // std::unique_lock<std::shared_mutex> page_table_lock_write(page_table_latch_);
-
-  if (!free_list_.empty()) {
     free_list_.pop_front();
   } else if (replacer_size > 0) {
-    // remove old page id
-    auto old_page_id = pages_[frame_id].page_id_;
-    // write dirty page to disk and reset page
-    if (pages_[frame_id].IsDirty()) {
-      FlushPage(old_page_id);
-      pages_[frame_id].is_dirty_ = false;
-    }
-    page_table_.erase(old_page_id);
+    replacer_->Evict(&frame_id);
   } else {
     return nullptr;
   }
-  // std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
-  // std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
+  replacer_->RecordAccess(frame_id);
+  replacer_->SetEvictable(frame_id, false);
+
+  std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
   free_list_lock.unlock();
 
-  page_table_[page_id] = frame_id;
-  // free_list_lock.unlock();
-  // page_table_lock_write.unlock();
+  // remove old page id
+  auto old_page_id = pages_[frame_id].page_id_;
+  if (!is_in_cache && replacer_size > 0) {
+    page_table_.erase(old_page_id);
+  }
+  if (!is_in_cache) {
+    page_table_[page_id] = frame_id;
+  }
   page_table_lock.unlock();
+
+  if (is_in_cache) {
+    pages_[frame_id].pin_count_++;
+    return &pages_[frame_id];
+  }
+
+  if (!is_in_cache && replacer_size > 0) {
+    // write dirty page to disk and reset page
+    if (pages_[frame_id].IsDirty()) {
+      auto promise = disk_scheduler_->CreatePromise();
+      auto future = promise.get_future();
+      // tell scheduler to write dirty page to disk
+      disk_scheduler_->Schedule({true, pages_[frame_id].data_, old_page_id, std::move(promise)});
+      // wait until worker thread set value
+      if (future.get()) {
+        pages_[frame_id].is_dirty_ = false;
+      }
+    }
+  }
+
   pages_[frame_id].page_id_ = page_id;
   pages_[frame_id].pin_count_++;
   pages_[frame_id].is_dirty_ = false;
   pages_[frame_id].ResetMemory();
-  replacer_->RecordAccess(frame_id);
-  replacer_->SetEvictable(frame_id, false);
 
   // fetch page from disk
   auto promise = disk_scheduler_->CreatePromise();
@@ -215,23 +223,19 @@ void BufferPoolManager::FlushAllPages() {
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   std::unique_lock<std::mutex> free_list_lock(free_list_latch_);
-  // std::shared_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   if (page_table_.find(page_id) == page_table_.end()) {
     return true;
   }
-  // page_table_lock.unlock();
   frame_id_t frame_id = page_table_[page_id];
   if (pages_[frame_id].pin_count_ >= 1) {
     return false;
   }
   // insert frame into free_list
   free_list_.push_back(frame_id);
-  // std::unique_lock<std::shared_mutex> page_table_lock(page_table_latch_);
   std::unique_lock<std::mutex> page_lock(pages_latches_[frame_id]);
   free_list_lock.unlock();
-  // std::unique_lock<std::shared_mutex> page_table_lock_write(page_table_latch_);
-  // delete page id in page table
+
   page_table_.erase(page_id);
   // page_table_lock_write.unlock();
   page_table_lock.unlock();
@@ -254,18 +258,18 @@ auto BufferPoolManager::AllocatePage() -> page_id_t {
   return next_page_id_++;
 }
 
-// auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard { return {this, FetchPage(page_id)}; }
+auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard { return {this, FetchPage(page_id)}; }
 
-// auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
-//   auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
-//   return basic_guard.UpgradeRead();
-// }
+auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
+  auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
+  return basic_guard.UpgradeRead();
+}
 
-// auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
-//   auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
-//   return basic_guard.UpgradeWrite();
-// }
+auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
+  auto basic_guard = BasicPageGuard(this, FetchPage(page_id));
+  return basic_guard.UpgradeWrite();
+}
 
-// auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard { return {this, NewPage(page_id)}; }
+auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard { return {this, NewPage(page_id)}; }
 
 }  // namespace bustub
