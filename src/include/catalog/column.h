@@ -126,16 +126,12 @@ class Column {
 
   /** Column name. */
   std::string column_name_;
-
   /** Column value's type. */
   TypeId column_type_;
-
   /** For a non-inlined column, this is the size of a pointer. Otherwise, the size of the fixed length column. */
   uint32_t fixed_length_;
-
   /** For an inlined column, 0. Otherwise, the length of the variable length column. */
   uint32_t variable_length_{0};
-
   /** Column offset in the tuple. */
   uint32_t column_offset_{0};
 };
