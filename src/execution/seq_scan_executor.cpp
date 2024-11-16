@@ -38,14 +38,11 @@ void SeqScanExecutor::Init() {
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-
-  // skip all deleted tuples
-
-  while(!table_iter_->IsEnd()){
+  while (!table_iter_->IsEnd()) {
     // skip deleted tuple(s)
     // warn!  waiting for testing, because of weak seqscan testcase
-    auto tuple_pair = table_iter_->GetTuple(); 
-    if(tuple_pair.first.is_deleted_) {
+    auto tuple_pair = table_iter_->GetTuple();
+    if (tuple_pair.first.is_deleted_) {
       table_iter_->operator++();
       continue;
     }
@@ -65,7 +62,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     table_iter_->operator++();
     return true;
   }
-  
+
   return false;
 }
 

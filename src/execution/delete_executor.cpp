@@ -20,10 +20,10 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
                                std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx) {
   plan_ = plan;
-  child_executor_ = std::move(child_executor);    
+  child_executor_ = std::move(child_executor);
 }
 
-void DeleteExecutor::Init() { 
+void DeleteExecutor::Init() {
   child_executor_->Init();
   auto table_id = plan_->GetTableOid();
   table_info_ = exec_ctx_->GetCatalog()->GetTable(table_id);
@@ -31,7 +31,7 @@ void DeleteExecutor::Init() {
   index_info_vector_ = exec_ctx_->GetCatalog()->GetTableIndexes(table_name);
 }
 
-auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool { 
+auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   int32_t deleted_tuple_count = 0;
   auto schema = table_info_->schema_;
   // pull tuple until empty
@@ -46,9 +46,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       auto key_schema = index_info->key_schema_;
       auto key_attrs = index_info->index_->GetKeyAttrs();
       // deleted index
-      index_info->index_->DeleteEntry(
-        tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr
-      );
+      index_info->index_->DeleteEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
     }
   }
   if (!is_deleted_) {
@@ -59,7 +57,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     *tuple = Tuple(value_vector, &GetOutputSchema());
     return true;
   }
-  return false; 
+  return false;
 }
 
 }  // namespace bustub

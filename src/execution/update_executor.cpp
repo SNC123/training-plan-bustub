@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 #define LOG_LEVEL LOG_LEVEL_OFF
-#include <memory>
 #include "execution/executors/update_executor.h"
+#include <memory>
 
 namespace bustub {
 
@@ -22,7 +22,7 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
   child_executor_ = std::move(child_executor);
 }
 
-void UpdateExecutor::Init() { 
+void UpdateExecutor::Init() {
   child_executor_->Init();
   auto table_id = plan_->GetTableOid();
   table_info_ = exec_ctx_->GetCatalog()->GetTable(table_id);
@@ -30,7 +30,7 @@ void UpdateExecutor::Init() {
   index_info_vector_ = exec_ctx_->GetCatalog()->GetTableIndexes(table_name);
 }
 
-auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool { 
+auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   int32_t updated_tuple_count = 0;
   auto schema = table_info_->schema_;
   // pull tuple until empty
@@ -41,7 +41,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // create new tuple
     std::vector<Value> values{};
     values.reserve(schema.GetColumnCount());
-    for(const auto& target_expression : plan_->target_expressions_){
+    for (const auto &target_expression : plan_->target_expressions_) {
       auto value = target_expression->Evaluate(tuple, schema);
       values.push_back(value);
     }
@@ -57,13 +57,10 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       auto key_schema = index_info->key_schema_;
       auto key_attrs = index_info->index_->GetKeyAttrs();
       // deleted index
-      index_info->index_->DeleteEntry(
-        tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr
-      );
+      index_info->index_->DeleteEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
       // created index
-      bool is_index_created = index_info->index_->InsertEntry(
-        tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr
-      );
+      bool is_index_created =
+          index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
       if (!is_index_created) {
         return false;
       }
@@ -77,7 +74,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     *tuple = Tuple(value_vector, &GetOutputSchema());
     return true;
   }
-  return false; 
+  return false;
 }
 
 }  // namespace bustub
