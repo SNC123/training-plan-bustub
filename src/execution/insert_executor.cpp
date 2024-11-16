@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include "type/value_factory.h"
 
 #define LOG_LEVEL LOG_LEVEL_OFF
 
@@ -24,61 +25,58 @@
 #include "type/type_id.h"
 #include "type/value.h"
 
-
-
 namespace bustub {
 
 InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *plan,
                                std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx) {
-    plan_ = plan;
-    child_executor_ = std::move(child_executor);
+  plan_ = plan;
+  child_executor_ = std::move(child_executor);
 }
 
-void InsertExecutor::Init() { 
+void InsertExecutor::Init() {
   child_executor_->Init();
   auto &table_id = plan_->table_oid_;
-  LOG_DEBUG("table id: %d",table_id);
+  LOG_DEBUG("table id: %d", table_id);
   auto &table_name = exec_ctx_->GetCatalog()->GetTable(table_id)->name_;
-  LOG_DEBUG("table name: %s",table_name.c_str());
+  LOG_DEBUG("table name: %s", table_name.c_str());
   table_info_ = exec_ctx_->GetCatalog()->GetTable(table_id);
   index_info_vector_ = exec_ctx_->GetCatalog()->GetTableIndexes(table_name);
   LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
 }
 
 auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-    int32_t inserted_tuple_count = 0;
-    auto schema = table_info_->schema_;
-    // pull tuple until empty
-    while( child_executor_->Next(tuple, rid) ) {
-        LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
-        // insert current tuple
-        if(! table_info_->table_->InsertTuple({0, false},*tuple) ) { return false;}
-        ++inserted_tuple_count;
-        LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
-        // update all index for current tuple
-        for(auto index_info : index_info_vector_) {
-            auto key_schema = index_info->key_schema_;
-            auto key_attrs = index_info->index_->GetKeyAttrs();
-            bool is_index_inserted = index_info->index_->InsertEntry(
-                tuple->KeyFromTuple(schema, key_schema, key_attrs),
-                *rid,
-                nullptr
-            );
-            if(!is_index_inserted) { return false; }
-        } 
+  int32_t inserted_tuple_count = 0;
+  auto schema = table_info_->schema_;
+  // pull tuple until empty
+  while (child_executor_->Next(tuple, rid)) {
+    LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
+    // insert current tuple
+    if (!table_info_->table_->InsertTuple({0, false}, *tuple)) {
+      return false;
     }
-    if(inserted_tuple_count > 0) {
-        // return count tuple
-        // auto count_column = Column("inserted_rows_count",TypeId::INTEGER);
-        // auto count_column_vector = std::vector<Column>{count_column};
-        // auto count_schema= Schema(count_column_vector);
-        auto integer_value = Value(TypeId::INTEGER,inserted_tuple_count);
-        auto value_vector = std::vector<Value>{integer_value};
-        *tuple = Tuple(value_vector,&GetOutputSchema());
-        return true; 
+    ++inserted_tuple_count;
+    LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
+    // update all index for current tuple
+    for (auto index_info : index_info_vector_) {
+      auto key_schema = index_info->key_schema_;
+      auto key_attrs = index_info->index_->GetKeyAttrs();
+      bool is_index_inserted =
+          index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
+      if (!is_index_inserted) {
+        return false;
+      }
     }
-    return false;
+  }
+  if (!is_inserted_) {
+    is_inserted_ = true;
+    // return count tuple
+    auto integer_value = ValueFactory::GetIntegerValue(inserted_tuple_count);
+    auto value_vector = std::vector<Value>{integer_value};
+    *tuple = Tuple(value_vector, &GetOutputSchema());
+    return true;
+  }
+  return false;
 }
 
 }  // namespace bustub

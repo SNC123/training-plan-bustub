@@ -21,7 +21,6 @@ auto ProjectionExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   if (!status) {
     return false;
   }
-
   // Compute expressions
   std::vector<Value> values{};
   values.reserve(GetOutputSchema().GetColumnCount());
