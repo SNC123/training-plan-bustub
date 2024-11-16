@@ -22,6 +22,7 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const bustub::AbstractPlanNodeRef &pl
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
   if (optimized_plan->GetType() == PlanType::SeqScan) {
     const auto &seq_scan_plan = dynamic_cast<const SeqScanPlanNode &>(*optimized_plan);
+    if(seq_scan_plan.filter_predicate_==nullptr ||seq_scan_plan.filter_predicate_->children_.empty()) {return optimized_plan;}
     // optimize to indexcasn iff single predicate on the indexed column
     LOG_DEBUG("pred: %s",seq_scan_plan.filter_predicate_->GetChildAt(0)->ToString().c_str());
     bool is_single = ( 

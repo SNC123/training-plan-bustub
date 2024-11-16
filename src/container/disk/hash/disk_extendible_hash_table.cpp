@@ -275,7 +275,7 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
   // calculate hash
   uint32_t hash = Hash(key);
   // fetch header,create directory if not exists
-  auto header_guard = bpm_->FetchPageWrite(0);
+  auto header_guard = bpm_->FetchPageWrite(header_page_id_);
   auto header_page = header_guard.AsMut<ExtendibleHTableHeaderPage>();
   uint32_t directory_idx = header_page->HashToDirectoryIndex(hash);
   page_id_t directory_page_id = header_page->GetDirectoryPageId(directory_idx);

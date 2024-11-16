@@ -45,7 +45,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     for (auto index_info : index_info_vector_) {
       auto key_schema = index_info->key_schema_;
       auto key_attrs = index_info->index_->GetKeyAttrs();
-      // deleted index
+      // delete index
       index_info->index_->DeleteEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
     }
   }

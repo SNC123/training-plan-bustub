@@ -52,15 +52,16 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   while (child_executor_->Next(tuple, rid)) {
     LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
     // insert current tuple
-    if (!table_info_->table_->InsertTuple({0, false}, *tuple)) {
-      return false;
-    }
+    auto opt_rid = table_info_->table_->InsertTuple({0, false}, *tuple);
+    if(!opt_rid.has_value()) { return false; }
+    *rid = opt_rid.value();
     ++inserted_tuple_count;
     LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
     // update all index for current tuple
     for (auto index_info : index_info_vector_) {
       auto key_schema = index_info->key_schema_;
       auto key_attrs = index_info->index_->GetKeyAttrs();
+      LOG_DEBUG("update RID: %s",rid->ToString().c_str());
       bool is_index_inserted =
           index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
       if (!is_index_inserted) {
