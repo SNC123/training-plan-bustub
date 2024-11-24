@@ -22,20 +22,18 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const bustub::AbstractPlanNodeRef &pl
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
   if (optimized_plan->GetType() == PlanType::SeqScan) {
     const auto &seq_scan_plan = dynamic_cast<const SeqScanPlanNode &>(*optimized_plan);
-    if(seq_scan_plan.filter_predicate_==nullptr ||seq_scan_plan.filter_predicate_->children_.empty()) {return optimized_plan;}
+    if (seq_scan_plan.filter_predicate_ == nullptr || seq_scan_plan.filter_predicate_->children_.empty()) {
+      return optimized_plan;
+    }
     // optimize to indexcasn iff single predicate on the indexed column
-    LOG_DEBUG("pred: %s",seq_scan_plan.filter_predicate_->GetChildAt(0)->ToString().c_str());
-    bool is_single = ( 
-      ( seq_scan_plan.filter_predicate_->children_[0]->children_.empty() )
-      &&
-      ( seq_scan_plan.filter_predicate_->children_[1]->children_.empty() )
-    );
+    LOG_DEBUG("pred: %s", seq_scan_plan.filter_predicate_->GetChildAt(0)->ToString().c_str());
+    bool is_single = ((seq_scan_plan.filter_predicate_->children_[0]->children_.empty()) &&
+                      (seq_scan_plan.filter_predicate_->children_[1]->children_.empty()));
     if (is_single) {
       const auto *table_info = catalog_.GetTable(seq_scan_plan.GetTableOid());
       const auto indices = catalog_.GetTableIndexes(table_info->name_);
       // check equal_comparsion
-      if (auto *expr = dynamic_cast<ComparisonExpression *>(seq_scan_plan.filter_predicate_.get());
-          expr != nullptr) {
+      if (auto *expr = dynamic_cast<ComparisonExpression *>(seq_scan_plan.filter_predicate_.get()); expr != nullptr) {
         if (expr->comp_type_ == ComparisonType::Equal) {
           if (const auto *left_expr = dynamic_cast<const ColumnValueExpression *>(expr->children_[0].get());
               left_expr != nullptr) {
@@ -49,10 +47,9 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const bustub::AbstractPlanNodeRef &pl
                 const auto &columns = index->index_->GetKeyAttrs();
                 // check match or not
                 if (seq_scan_column_ids == columns) {
-                  return std::make_shared<IndexScanPlanNode>(
-                    seq_scan_plan.output_schema_, seq_scan_plan.table_oid_,
-                    index->index_oid_, seq_scan_plan.filter_predicate_, right_expr
-                  );
+                  return std::make_shared<IndexScanPlanNode>(seq_scan_plan.output_schema_, seq_scan_plan.table_oid_,
+                                                             index->index_oid_, seq_scan_plan.filter_predicate_,
+                                                             right_expr);
                 }
               }
             }

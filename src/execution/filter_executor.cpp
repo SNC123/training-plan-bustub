@@ -1,3 +1,4 @@
+#define LOG_LEVEL LOG_LEVEL_OFF
 #include "execution/executors/filter_executor.h"
 #include "common/exception.h"
 #include "common/logger.h"

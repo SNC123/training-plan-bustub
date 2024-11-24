@@ -28,16 +28,16 @@ void IndexScanExecutor::Init() {
   htable_ = dynamic_cast<HashTableIndexForTwoIntegerColumn *>(index_info_->index_.get());
 
   std::vector<Value> values{};
-  LOG_DEBUG("pred_key: %s",plan_->pred_key_->ToString().c_str());
+  LOG_DEBUG("pred_key: %s", plan_->pred_key_->ToString().c_str());
   auto value = plan_->pred_key_->Evaluate(nullptr, index_info_->key_schema_);
-  LOG_DEBUG("value: %s",value.ToString().c_str());
+  LOG_DEBUG("value: %s", value.ToString().c_str());
   values.push_back(value);
   htable_->ScanKey(Tuple(values, &index_info_->key_schema_), &rid_results_, nullptr);
   LOG_DEBUG("found key size: %zu", rid_results_.size());
 }
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  while (cursor_<rid_results_.size()) {
+  while (cursor_ < rid_results_.size()) {
     // skip deleted tuple(s)
     // warn!  waiting for testing, because of weak seqscan testcase
     auto tuple_pair = table_info_->table_->GetTuple(rid_results_[cursor_]);

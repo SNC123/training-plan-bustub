@@ -40,7 +40,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // delete old tuple(just set is_deleted to true)
     auto old_rid = *rid;
     auto old_tuple = *tuple;
-    LOG_DEBUG("delete tuple: %s",old_tuple.ToString(&schema).c_str());
+    LOG_DEBUG("delete tuple: %s", old_tuple.ToString(&schema).c_str());
     table_info_->table_->UpdateTupleMeta({0, true}, old_rid);
     LOG_DEBUG("delete rid: %s", rid->ToString().c_str());
     // create new tuple
@@ -51,10 +51,12 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       values.push_back(value);
     }
     *tuple = Tuple(values, &schema);
-    LOG_DEBUG("new tuple: %s",tuple->ToString(&schema).c_str());
+    LOG_DEBUG("new tuple: %s", tuple->ToString(&schema).c_str());
     // insert new tuple
     auto opt_rid = table_info_->table_->InsertTuple({0, false}, *tuple);
-    if(!opt_rid.has_value()) { return false; }
+    if (!opt_rid.has_value()) {
+      return false;
+    }
     *rid = opt_rid.value();
     LOG_DEBUG("created rid: %s", rid->ToString().c_str());
     ++updated_tuple_count;

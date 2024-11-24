@@ -42,6 +42,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     // skip deleted tuple(s)
     // warn!  waiting for testing, because of weak seqscan testcase
     auto tuple_pair = table_iter_->GetTuple();
+    LOG_DEBUG("tuple: %s", tuple_pair.second.ToString(&GetOutputSchema()).c_str());
     if (tuple_pair.first.is_deleted_) {
       table_iter_->operator++();
       continue;
