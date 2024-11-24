@@ -77,41 +77,40 @@ class SimpleAggregationHashTable {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
       switch (agg_types_[i]) {
         case AggregationType::CountStarAggregate:
-          result->aggregates_[i] =  ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int>()+1);
+          result->aggregates_[i] = ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int>() + 1);
           break;
         case AggregationType::CountAggregate:
-          if(!input.aggregates_[i].IsNull()) {
-            if(result->aggregates_[i].IsNull()){
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
               result->aggregates_[i] = ValueFactory::GetIntegerValue(0);
             }
-            result->aggregates_[i] = ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int>()+1);
+            result->aggregates_[i] = ValueFactory::GetIntegerValue(result->aggregates_[i].GetAs<int>() + 1);
           }
           break;
         case AggregationType::SumAggregate:
-          if(!input.aggregates_[i].IsNull()) {
-            if(result->aggregates_[i].IsNull()){
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
               result->aggregates_[i] = ValueFactory::GetIntegerValue(0);
-            }        
-            result->aggregates_[i] =  ValueFactory::GetIntegerValue(
-              input.aggregates_[i].GetAs<int>() + result->aggregates_[i].GetAs<int>()
-            );
+            }
+            result->aggregates_[i] =
+                ValueFactory::GetIntegerValue(input.aggregates_[i].GetAs<int>() + result->aggregates_[i].GetAs<int>());
           }
 
           break;
         case AggregationType::MinAggregate:
-          if(!input.aggregates_[i].IsNull()) {
-            if(result->aggregates_[i].IsNull()){
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
               result->aggregates_[i] = input.aggregates_[i];
-            }else{
+            } else {
               result->aggregates_[i] = result->aggregates_[i].Min(input.aggregates_[i]);
             }
           }
           break;
         case AggregationType::MaxAggregate:
-          if(!input.aggregates_[i].IsNull()) {
-            if(result->aggregates_[i].IsNull()){
+          if (!input.aggregates_[i].IsNull()) {
+            if (result->aggregates_[i].IsNull()) {
               result->aggregates_[i] = input.aggregates_[i];
-            }else{
+            } else {
               result->aggregates_[i] = result->aggregates_[i].Max(input.aggregates_[i]);
             }
           }
@@ -235,6 +234,7 @@ class AggregationExecutor : public AbstractExecutor {
     }
     return {vals};
   }
+
  private:
   /** The aggregation plan node */
   const AggregationPlanNode *plan_;

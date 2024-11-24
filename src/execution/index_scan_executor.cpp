@@ -21,6 +21,8 @@ IndexScanExecutor::IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanP
 }
 
 void IndexScanExecutor::Init() {
+  cursor_ = 0;
+  rid_results_.clear();
   auto table_id = plan_->table_oid_;
   auto index_id = plan_->index_oid_;
   table_info_ = exec_ctx_->GetCatalog()->GetTable(table_id);
