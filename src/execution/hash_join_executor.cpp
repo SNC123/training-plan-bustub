@@ -18,16 +18,16 @@ HashJoinExecutor::HashJoinExecutor(ExecutorContext *exec_ctx, const HashJoinPlan
                                    std::unique_ptr<AbstractExecutor> &&left_child,
                                    std::unique_ptr<AbstractExecutor> &&right_child)
     : AbstractExecutor(exec_ctx),
-    plan_(plan),
-    left_executor_(std::move(left_child)),
-    right_executor_(std::move(right_child)) {
+      plan_(plan),
+      left_executor_(std::move(left_child)),
+      right_executor_(std::move(right_child)) {
   if (!(plan->GetJoinType() == JoinType::LEFT || plan->GetJoinType() == JoinType::INNER)) {
     // Note for 2023 Fall: You ONLY need to implement left join and inner join.
     throw bustub::NotImplementedException(fmt::format("join type {} not supported", plan->GetJoinType()));
   }
 }
 
-void HashJoinExecutor::Init() { 
+void HashJoinExecutor::Init() {
   cursor_ = 0;
   inner_hash_table_.clear();
   result_tuple_.clear();
@@ -36,23 +36,25 @@ void HashJoinExecutor::Init() {
   // To simplify, always choose right table as inner table to build hash table
   RID right_rid{};
   Tuple right_tuple{};
-  while(right_executor_->Next(&right_tuple, &right_rid)) {
+  while (right_executor_->Next(&right_tuple, &right_rid)) {
     inner_hash_table_[MakeRightJoinKey(&right_tuple)].emplace_back(
-      MakeHashJoinValue(&right_tuple, &right_executor_->GetOutputSchema()));
+        MakeHashJoinValue(&right_tuple, &right_executor_->GetOutputSchema()));
   }
   if (plan_->GetJoinType() == JoinType::INNER) {
     RID left_rid{};
     Tuple left_tuple{};
-    while(left_executor_->Next(&left_tuple, &left_rid)){
+    while (left_executor_->Next(&left_tuple, &left_rid)) {
       auto left_key = MakeLeftJoinKey(&left_tuple);
       auto iter = inner_hash_table_.find(left_key);
-      if(iter == inner_hash_table_.end()) { continue; }
+      if (iter == inner_hash_table_.end()) {
+        continue;
+      }
       // handle hash collisions
-      auto right_values= iter->second;
-      for(auto &join_value : right_values){
-        auto right_tuple =  JoinValueToTuple(&join_value, &right_executor_->GetOutputSchema());
+      auto right_values = iter->second;
+      for (auto &join_value : right_values) {
+        auto right_tuple = JoinValueToTuple(&join_value, &right_executor_->GetOutputSchema());
         auto right_key = MakeRightJoinKey(&right_tuple);
-        if(left_key == right_key){
+        if (left_key == right_key) {
           std::vector<Value> values;
           auto left_schema_col_cnt = left_executor_->GetOutputSchema().GetColumnCount();
           for (uint32_t idx = 0; idx < left_schema_col_cnt; ++idx) {
@@ -66,13 +68,13 @@ void HashJoinExecutor::Init() {
         }
       }
     }
-  }else if(plan_->GetJoinType() == JoinType::LEFT){
+  } else if (plan_->GetJoinType() == JoinType::LEFT) {
     RID left_rid{};
     Tuple left_tuple{};
-    while(left_executor_->Next(&left_tuple, &left_rid)){
+    while (left_executor_->Next(&left_tuple, &left_rid)) {
       auto left_key = MakeLeftJoinKey(&left_tuple);
       auto iter = inner_hash_table_.find(left_key);
-      if(iter == inner_hash_table_.end()) {
+      if (iter == inner_hash_table_.end()) {
         std::vector<Value> values;
         auto left_schema_col_cnt = left_executor_->GetOutputSchema().GetColumnCount();
         for (uint32_t idx = 0; idx < left_schema_col_cnt; ++idx) {
@@ -85,14 +87,14 @@ void HashJoinExecutor::Init() {
               ValueFactory::GetNullValueByType(right_executor_->GetOutputSchema().GetColumn(idx).GetType()));
         }
         result_tuple_.emplace_back(Tuple(values, &GetOutputSchema()));
-        continue; 
+        continue;
       }
       // handle hash collisions
-      auto right_values= iter->second;
-      for(auto &join_value : right_values){
-        auto right_tuple =  JoinValueToTuple(&join_value, &right_executor_->GetOutputSchema());
+      auto right_values = iter->second;
+      for (auto &join_value : right_values) {
+        auto right_tuple = JoinValueToTuple(&join_value, &right_executor_->GetOutputSchema());
         auto right_key = MakeRightJoinKey(&right_tuple);
-        if(left_key == right_key){
+        if (left_key == right_key) {
           std::vector<Value> values;
           auto left_schema_col_cnt = left_executor_->GetOutputSchema().GetColumnCount();
           for (uint32_t idx = 0; idx < left_schema_col_cnt; ++idx) {
@@ -102,14 +104,14 @@ void HashJoinExecutor::Init() {
           for (uint32_t idx = 0; idx < right_schema_col_cnt; ++idx) {
             values.emplace_back(right_tuple.GetValue(&right_executor_->GetOutputSchema(), idx));
           }
-          result_tuple_.emplace_back(Tuple(values, &GetOutputSchema()));          
+          result_tuple_.emplace_back(Tuple(values, &GetOutputSchema()));
         }
       }
     }
   }
 }
 
-auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool { 
+auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   if (cursor_ != result_tuple_.size()) {
     *tuple = result_tuple_[cursor_];
     *rid = tuple->GetRid();
