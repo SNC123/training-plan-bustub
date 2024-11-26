@@ -54,10 +54,11 @@ auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> Abstra
   // E.g. <column expr> = <column expr> AND <column expr> = <column expr> AND ...
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {
-    children.emplace_back(OptimizeSeqScanAsIndexScan(child));
+    children.emplace_back(OptimizeNLJAsHashJoin(child));
   }
 
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
+  LOG_DEBUG("plan_type: %d",optimized_plan->GetType());
   if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
     const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
     std::vector<AbstractExpressionRef> left_key_expressions;
