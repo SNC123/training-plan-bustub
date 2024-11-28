@@ -17,22 +17,20 @@ namespace bustub {
 
 LimitExecutor::LimitExecutor(ExecutorContext *exec_ctx, const LimitPlanNode *plan,
                              std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx),
-    plan_(plan),
-    child_executor_(std::move(child_executor)) {}
+    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
-void LimitExecutor::Init() { 
-    cursor_ = 0;
-    result_tuple_.clear();
-    child_executor_->Init();
-    RID rid{};
-    Tuple tuple{};
-    while(child_executor_->Next(&tuple, &rid)){
-        result_tuple_.emplace_back(tuple);
-    }
-    while(result_tuple_.size() > plan_->limit_) {
-        result_tuple_.pop_back();
-    }
+void LimitExecutor::Init() {
+  cursor_ = 0;
+  result_tuple_.clear();
+  child_executor_->Init();
+  RID rid{};
+  Tuple tuple{};
+  while (child_executor_->Next(&tuple, &rid)) {
+    result_tuple_.emplace_back(tuple);
+  }
+  while (result_tuple_.size() > plan_->limit_) {
+    result_tuple_.pop_back();
+  }
 }
 
 auto LimitExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -44,6 +42,5 @@ auto LimitExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   return false;
 }
-
 
 }  // namespace bustub
