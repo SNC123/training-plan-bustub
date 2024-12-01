@@ -1,6 +1,6 @@
 #include "storage/page/page_guard.h"
 #include "buffer/buffer_pool_manager.h"
-// #define DEBUG(msg) \
+// #define DEBUG(msg) 
 //     if (DEBUG_FLAG) { std::cout << msg << std::endl; }
 
 // const bool DEBUG_FLAG = true;
