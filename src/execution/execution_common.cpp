@@ -1,10 +1,14 @@
 #include "execution/execution_common.h"
+#include <optional>
 #include "catalog/catalog.h"
+#include "catalog/column.h"
+#include "catalog/schema.h"
 #include "common/config.h"
 #include "common/macros.h"
 #include "concurrency/transaction_manager.h"
 #include "fmt/core.h"
 #include "storage/table/table_heap.h"
+#include "storage/table/tuple.h"
 #include "type/value.h"
 #include "type/value_factory.h"
 
@@ -12,7 +16,37 @@ namespace bustub {
 
 auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const TupleMeta &base_meta,
                       const std::vector<UndoLog> &undo_logs) -> std::optional<Tuple> {
-  UNIMPLEMENTED("not implemented");
+  std::optional<Tuple> result_tuple = base_tuple;
+  if(base_meta.is_deleted_){
+    result_tuple = std::nullopt;
+  }
+  for(auto &log : undo_logs){
+    if(log.is_deleted_){
+      result_tuple = std::nullopt;
+      continue;
+    } 
+    // update matched column
+    auto base_column_num = schema->GetColumnCount();
+    std::vector<Column> columns;
+    for(size_t idx=0; idx<base_column_num; ++idx){
+      if(log.modified_fields_[idx]) {
+        columns.emplace_back(schema->GetColumn(idx));
+      }
+    }
+    auto part_schema = Schema(columns);
+    auto modified_idx = 0;
+    std::vector<Value> values;
+    for(size_t idx=0; idx<base_column_num; ++idx){
+      if(log.modified_fields_[idx]){
+        values.emplace_back(log.tuple_.GetValue(&part_schema, modified_idx++));
+      }else{
+        // is necessary to check result tuple nullopt???
+        values.emplace_back(result_tuple->GetValue(schema,idx));
+      }
+    }
+    result_tuple = Tuple({values, schema});
+  }
+  return result_tuple;
 }
 
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
