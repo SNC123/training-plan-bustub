@@ -75,6 +75,8 @@ auto TransactionManager::Commit(Transaction *txn) -> bool {
   txn->state_ = TransactionState::COMMITTED;
   running_txns_.UpdateCommitTs(txn->commit_ts_);
   running_txns_.RemoveTxn(txn->read_ts_);
+  // WE CAN'T DO THAT, BACAUSE OF RESOURCE RELEASE AND LATER REFERENCE
+  // txn_id is unique, so it's right to GC later?
   // txn_map_.erase(txn->txn_id_);
 
   return true;
