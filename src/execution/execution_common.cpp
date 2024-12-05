@@ -17,31 +17,31 @@ namespace bustub {
 auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const TupleMeta &base_meta,
                       const std::vector<UndoLog> &undo_logs) -> std::optional<Tuple> {
   std::optional<Tuple> result_tuple = base_tuple;
-  if(base_meta.is_deleted_){
+  if (base_meta.is_deleted_) {
     result_tuple = std::nullopt;
   }
-  for(auto &log : undo_logs){
-    if(log.is_deleted_){
+  for (auto &log : undo_logs) {
+    if (log.is_deleted_) {
       result_tuple = std::nullopt;
       continue;
-    } 
+    }
     // update matched column
     auto base_column_num = schema->GetColumnCount();
     std::vector<Column> columns;
-    for(size_t idx=0; idx<base_column_num; ++idx){
-      if(log.modified_fields_[idx]) {
+    for (size_t idx = 0; idx < base_column_num; ++idx) {
+      if (log.modified_fields_[idx]) {
         columns.emplace_back(schema->GetColumn(idx));
       }
     }
     auto part_schema = Schema(columns);
     auto modified_idx = 0;
     std::vector<Value> values;
-    for(size_t idx=0; idx<base_column_num; ++idx){
-      if(log.modified_fields_[idx]){
+    for (size_t idx = 0; idx < base_column_num; ++idx) {
+      if (log.modified_fields_[idx]) {
         values.emplace_back(log.tuple_.GetValue(&part_schema, modified_idx++));
-      }else{
+      } else {
         // is necessary to check result tuple nullopt???
-        values.emplace_back(result_tuple->GetValue(schema,idx));
+        values.emplace_back(result_tuple->GetValue(schema, idx));
       }
     }
     result_tuple = Tuple({values, schema});
