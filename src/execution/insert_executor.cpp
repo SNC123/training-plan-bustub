@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 #include "type/value_factory.h"
 
@@ -24,6 +25,8 @@
 #include "storage/table/tuple.h"
 #include "type/type_id.h"
 #include "type/value.h"
+#include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 
 namespace bustub {
 
@@ -50,15 +53,25 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   auto schema = table_info_->schema_;
   // pull tuple until empty
   while (child_executor_->Next(tuple, rid)) {
+
     LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
-    // insert current tuple
-    auto opt_rid = table_info_->table_->InsertTuple({0, false}, *tuple);
+
+    // insert current tuple (modified at P4T3.1, ts 0 -> TXN_START_ID + txn_id )
+    auto txn = exec_ctx_->GetTransaction();
+    auto txn_mgr = exec_ctx_->GetTransactionManager();
+    auto tmp_ts = txn->GetTransactionTempTs();
+    auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
     if (!opt_rid.has_value()) {
       return false;
     }
     *rid = opt_rid.value();
+    txn->AppendWriteSet(table_info_->oid_, *rid);
+    // just set check function to 'nullptr' to skip Write-Write conflict detection
+    txn_mgr->UpdateUndoLink(*rid,std::nullopt,nullptr);
     ++inserted_tuple_count;
+
     LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
+
     // update all index for current tuple
     for (auto index_info : index_info_vector_) {
       auto key_schema = index_info->key_schema_;

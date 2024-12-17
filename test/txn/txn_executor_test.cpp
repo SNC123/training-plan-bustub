@@ -5,7 +5,7 @@ namespace bustub {
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)
 
-TEST(TxnExecutorTest, DISABLED_InsertTest) {  // NOLINT
+TEST(TxnExecutorTest, InsertTest) {  // NOLINT
   auto bustub = std::make_unique<BustubInstance>();
   auto empty_table = IntResult{};
   Execute(*bustub, "CREATE TABLE maintable(a int)");
@@ -13,6 +13,8 @@ TEST(TxnExecutorTest, DISABLED_InsertTest) {  // NOLINT
   auto txn1 = BeginTxn(*bustub, "txn1");
   auto txn2 = BeginTxn(*bustub, "txn2");
   auto txn_ref = BeginTxn(*bustub, "txn_ref");
+  
+  TxnMgrDbg("before insertion", bustub->txn_manager_.get(), table_info, table_info->table_.get());
 
   WithTxn(txn1, ExecuteTxn(*bustub, _var, _txn, "INSERT INTO maintable VALUES (1)"));
   WithTxn(txn2, ExecuteTxn(*bustub, _var, _txn, "INSERT INTO maintable VALUES (2)"));
