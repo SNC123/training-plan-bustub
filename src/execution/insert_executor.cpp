@@ -56,7 +56,8 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
     LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
 
-    // insert current tuple (modified at P4T3.1, ts 0 -> TXN_START_ID + txn_id )
+    // insert current tuple 
+    // modified at P4T3.1, ts 0 -> TXN_START_ID + txn_id 
     auto txn = exec_ctx_->GetTransaction();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
     auto tmp_ts = txn->GetTransactionTempTs();

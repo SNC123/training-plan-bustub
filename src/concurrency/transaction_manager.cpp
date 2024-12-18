@@ -71,10 +71,23 @@ auto TransactionManager::Commit(Transaction *txn) -> bool {
   std::unique_lock<std::shared_mutex> lck(txn_map_mutex_);
 
   // TODO(fall2023): set commit timestamp + update last committed timestamp here.
-  txn->commit_ts_ = ++last_commit_ts_;
+  txn->commit_ts_ = last_commit_ts_+1;
+  auto write_set = txn->GetWriteSets();
+  // update tuple ts (tmp_ts -> commit_ts)
+  for(const auto& ws : write_set){
+    auto table_id = ws.first;
+    auto talbe_info = catalog_->GetTable(table_id);
+    for(auto rid : ws.second){
+      auto tuple_meta = talbe_info->table_->GetTupleMeta(rid);
+      tuple_meta.ts_ = txn->commit_ts_;
+      talbe_info->table_->UpdateTupleMeta(tuple_meta, rid);
+    }
+  }
   txn->state_ = TransactionState::COMMITTED;
   running_txns_.UpdateCommitTs(txn->commit_ts_);
   running_txns_.RemoveTxn(txn->read_ts_);
+  // added at P4T3.2, why update in the end???
+  ++last_commit_ts_;
   // WE CAN'T DO THAT, BACAUSE OF RESOURCE RELEASE AND LATER REFERENCE
   // txn_id is unique, so it's right to GC later?
   // txn_map_.erase(txn->txn_id_);
