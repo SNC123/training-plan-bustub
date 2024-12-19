@@ -41,29 +41,31 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   // pull tuple until empty
   while (child_executor_->Next(tuple, rid)) {
     LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
+    LOG_DEBUG("rid: %s", tuple->GetRid().ToString().c_str());
 
     // modified at P4T3.3, ts 0 -> TXN_START_ID + txn_id
     auto txn = exec_ctx_->GetTransaction();
     auto txn_id = txn->GetTransactionId();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
     auto tmp_ts = txn->GetTransactionTempTs(); 
+
+    // if tuple is not in table heap, it must be write-write conflict (think carefully!!!)
+    if(tuple->GetRid().GetPageId() == INVALID_PAGE_ID) {
+        txn->SetTainted();
+        throw ExecutionException("Detect write-write conflict !");    
+    }
+
+
+    
     auto meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
-    auto read_ts = txn->GetReadTs();
+    // auto read_ts = txn->GetReadTs();
     // check if tuple is being modified
     if(meta_ts >= TXN_START_ID) {
-      LOG_DEBUG("into txn_start_id");
       if(meta_ts == txn_id){
         // delete old tuple(just set is_deleted to true)
         table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
-      }else{
-        txn->SetTainted();
-        throw ExecutionException("Detect write-write conflict with another uncommitted transaction");
       }
-    }else{
-      if(read_ts < meta_ts) {
-        txn->SetTainted();
-        throw ExecutionException("Detect write-write conflict with committed transaction");        
-      }        
+    }else{       
       // insert one log with full columns into link
       std::vector<bool> modified_fields;
       auto column_count = table_info_->schema_.GetColumnCount();
