@@ -12,7 +12,7 @@
 #include <cstdint>
 #include "common/config.h"
 #include "common/exception.h"
-// #define LOG_LEVEL LOG_LEVEL_OFF
+#define LOG_LEVEL LOG_LEVEL_OFF
 #include <memory>
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
@@ -43,7 +43,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
     LOG_DEBUG("rid: %s", tuple->GetRid().ToString().c_str());
 
-    // modified at P4T3.3, ts 0 -> TXN_START_ID + txn_id
+    // modified at P4T3.3
     auto txn = exec_ctx_->GetTransaction();
     auto txn_id = txn->GetTransactionId();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
@@ -55,8 +55,6 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         throw ExecutionException("Detect write-write conflict !");    
     }
 
-
-    
     auto meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
     // auto read_ts = txn->GetReadTs();
     // check if tuple is being modified
@@ -82,8 +80,8 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       txn_mgr->UpdateUndoLink(*rid, new_undo_link);
       table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
     }
-
     txn->AppendWriteSet(table_info_->oid_, *rid);
+    
     ++deleted_tuple_count;
     LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
     // update all index for current tuple
