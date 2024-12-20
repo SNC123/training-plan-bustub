@@ -23,9 +23,9 @@ namespace bustub {
 auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const TupleMeta &base_meta,
                       const std::vector<UndoLog> &undo_logs) -> std::optional<Tuple> {
   std::optional<Tuple> result_tuple = base_tuple;
-  if (base_meta.is_deleted_) {
-    result_tuple = std::nullopt;
-  }
+  // if (base_meta.is_deleted_) {
+  //   result_tuple = std::nullopt;
+  // }
   for (auto &log : undo_logs) {
     if (log.is_deleted_) {
       result_tuple = std::nullopt;
@@ -88,11 +88,12 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
     // print log
     auto undo_link = txn_mgr->GetUndoLink(rid);
     while(undo_link!=std::nullopt && undo_link->IsValid()){
-      auto undo_log =txn_mgr->GetUndoLog(undo_link.value());
+      auto undo_log =txn_mgr->GetUndoLogOptional(undo_link.value());
+      if(!undo_log.has_value()){ break;}
       // build timestamp string
-      auto ts_str = undo_log.ts_;
+      auto ts_str = undo_log->ts_;
       // build del mark string
-      bool is_del = undo_log.is_deleted_;
+      bool is_del = undo_log->is_deleted_;
       std::string del_mark ;
       if(is_del){
         del_mark = "<del>";
@@ -104,7 +105,7 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
       auto base_column_num = table_info->schema_.GetColumnCount();
       std::vector<Column> columns;
       for (size_t idx = 0; idx < base_column_num; ++idx) {
-        if (undo_log.modified_fields_[idx]) {
+        if (undo_log->modified_fields_[idx]) {
           columns.emplace_back(table_info->schema_.GetColumn(idx));
         }
       }
@@ -112,8 +113,8 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
       auto part_schema = Schema(columns);
       std::vector<Value> values;
       for (size_t idx = 0; idx < base_column_num; ++idx) {
-        if (undo_log.modified_fields_[idx]) {
-          tuple_str += undo_log.tuple_.GetValue(&part_schema, modified_idx++).ToString();
+        if (undo_log->modified_fields_[idx]) {
+          tuple_str += undo_log->tuple_.GetValue(&part_schema, modified_idx++).ToString();
         } else {
           tuple_str +="_";
         }
@@ -127,7 +128,7 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
         del_mark,                                                 
         tuple_str                                                    
       );
-      undo_link = undo_log.prev_version_;
+      undo_link = undo_log->prev_version_;
     }
     ++table_iter;
   }
