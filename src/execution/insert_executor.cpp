@@ -21,12 +21,12 @@
 #include "catalog/column.h"
 #include "catalog/schema.h"
 #include "common/logger.h"
+#include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 #include "execution/executors/insert_executor.h"
 #include "storage/table/tuple.h"
 #include "type/type_id.h"
 #include "type/value.h"
-#include "concurrency/transaction.h"
-#include "concurrency/transaction_manager.h"
 
 namespace bustub {
 
@@ -53,11 +53,10 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   auto schema = table_info_->schema_;
   // pull tuple until empty
   while (child_executor_->Next(tuple, rid)) {
-
     LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
 
-    // insert current tuple 
-    // modified at P4T3.1, ts 0 -> TXN_START_ID + txn_id 
+    // insert current tuple
+    // modified at P4T3.1, ts 0 -> TXN_START_ID + txn_id
     auto txn = exec_ctx_->GetTransaction();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
     auto tmp_ts = txn->GetTransactionTempTs();
@@ -68,7 +67,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     *rid = opt_rid.value();
     txn->AppendWriteSet(table_info_->oid_, *rid);
     // just set check function to 'nullptr' to skip Write-Write conflict detection
-    txn_mgr->UpdateUndoLink(*rid,std::nullopt,nullptr);
+    txn_mgr->UpdateUndoLink(*rid, std::nullopt, nullptr);
     ++inserted_tuple_count;
 
     LOG_DEBUG("index_info size: %zu", index_info_vector_.size());

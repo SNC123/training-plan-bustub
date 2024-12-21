@@ -47,32 +47,32 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     auto txn = exec_ctx_->GetTransaction();
     auto txn_id = txn->GetTransactionId();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
-    auto tmp_ts = txn->GetTransactionTempTs(); 
+    auto tmp_ts = txn->GetTransactionTempTs();
 
     // if tuple is not in table heap, it must be write-write conflict (think carefully!!!)
-    if(tuple->GetRid().GetPageId() == INVALID_PAGE_ID) {
-        txn->SetTainted();
-        throw ExecutionException("Detect write-write conflict !");    
+    if (tuple->GetRid().GetPageId() == INVALID_PAGE_ID) {
+      txn->SetTainted();
+      throw ExecutionException("Detect write-write conflict !");
     }
 
     auto meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
     // auto read_ts = txn->GetReadTs();
     // check if tuple is being modified
-    if(meta_ts >= TXN_START_ID) {
-      if(meta_ts == txn_id){
+    if (meta_ts >= TXN_START_ID) {
+      if (meta_ts == txn_id) {
         // delete old tuple(just set is_deleted to true)
         table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
       }
-    }else{       
+    } else {
       // insert one log with full columns into link
       std::vector<bool> modified_fields;
       auto column_count = table_info_->schema_.GetColumnCount();
-      for(uint32_t i=0;i<column_count;++i){
+      for (uint32_t i = 0; i < column_count; ++i) {
         modified_fields.emplace_back(true);
       }
       auto prev_link = txn_mgr->GetUndoLink(*rid);
       auto new_undo_log = UndoLog{false, modified_fields, *tuple, meta_ts, {}};
-      if(prev_link.has_value()){
+      if (prev_link.has_value()) {
         new_undo_log.prev_version_ = prev_link.value();
       }
       // txn_mgr->
@@ -81,7 +81,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
     }
     txn->AppendWriteSet(table_info_->oid_, *rid);
-    
+
     ++deleted_tuple_count;
     LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
     // update all index for current tuple

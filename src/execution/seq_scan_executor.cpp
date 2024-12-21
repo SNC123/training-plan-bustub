@@ -56,7 +56,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     auto txn_read_ts = txn->GetReadTs();
     auto txn_id = txn->GetTransactionId();
     LOG_DEBUG("txn_readable_id: %ld", txn->GetTransactionIdHumanReadable());
-    
+
     // if tuple is modified by the current transaction, directly return
     // else do reconstruction
     if (txn_id != txn_commit_ts && txn_read_ts < txn_commit_ts) {
