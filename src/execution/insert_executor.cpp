@@ -14,6 +14,8 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include "common/exception.h"
+#include "common/rid.h"
 #include "type/value_factory.h"
 
 #define LOG_LEVEL LOG_LEVEL_OFF
@@ -40,12 +42,9 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 void InsertExecutor::Init() {
   child_executor_->Init();
   auto &table_id = plan_->table_oid_;
-  LOG_DEBUG("table id: %d", table_id);
   auto &table_name = exec_ctx_->GetCatalog()->GetTable(table_id)->name_;
-  LOG_DEBUG("table name: %s", table_name.c_str());
   table_info_ = exec_ctx_->GetCatalog()->GetTable(table_id);
   index_info_vector_ = exec_ctx_->GetCatalog()->GetTableIndexes(table_name);
-  LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
 }
 
 auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
@@ -53,36 +52,58 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   auto schema = table_info_->schema_;
   // pull tuple until empty
   while (child_executor_->Next(tuple, rid)) {
-    LOG_DEBUG("tuple: %s", tuple->ToString(&schema).c_str());
-
-    // insert current tuple
-    // modified at P4T3.1, ts 0 -> TXN_START_ID + txn_id
+    // modified at P4T4.1
     auto txn = exec_ctx_->GetTransaction();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
     auto tmp_ts = txn->GetTransactionTempTs();
-    auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
-    if (!opt_rid.has_value()) {
-      return false;
-    }
-    *rid = opt_rid.value();
-    txn->AppendWriteSet(table_info_->oid_, *rid);
-    // just set check function to 'nullptr' to skip Write-Write conflict detection
-    txn_mgr->UpdateUndoLink(*rid, std::nullopt, nullptr);
-    ++inserted_tuple_count;
-
-    LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
-
-    // update all index for current tuple
-    for (auto index_info : index_info_vector_) {
-      auto key_schema = index_info->key_schema_;
-      auto key_attrs = index_info->index_->GetKeyAttrs();
-      LOG_DEBUG("update RID: %s", rid->ToString().c_str());
-      bool is_index_inserted =
-          index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
-      if (!is_index_inserted) {
+    // check index exists or not
+    if (index_info_vector_.empty()) {
+      auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
+      if (!opt_rid.has_value()) {
         return false;
       }
+      *rid = opt_rid.value();
+      txn->AppendWriteSet(table_info_->oid_, *rid);
+      // just set check function to 'nullptr' to skip Write-Write conflict detection
+      txn_mgr->UpdateUndoLink(*rid, std::nullopt, nullptr);
+      ++inserted_tuple_count;
+    } else {
+      // update all index for current tuple
+      for (auto index_info : index_info_vector_) {
+        auto key_schema = index_info->key_schema_;
+        auto key_attrs = index_info->index_->GetKeyAttrs();
+        auto target_key = tuple->KeyFromTuple(schema, key_schema, key_attrs);
+        std::vector<RID> found_rids{};
+
+        if (index_info->is_primary_key_) {
+          index_info->index_->ScanKey(target_key, &found_rids, nullptr);
+          if (!found_rids.empty()) {
+            // maintain primary key index
+            txn->SetTainted();
+            throw ExecutionException("detect write-write conflict!");
+          }
+        }
+
+        auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
+        if (!opt_rid.has_value()) {
+          return false;
+        }
+        *rid = opt_rid.value();
+        txn->AppendWriteSet(table_info_->oid_, *rid);
+        // just set check function to 'nullptr' to skip Write-Write conflict detection
+        txn_mgr->UpdateUndoLink(*rid, std::nullopt, nullptr);
+        ++inserted_tuple_count;
+
+        bool is_index_inserted = index_info->index_->InsertEntry(target_key, *rid, nullptr);
+        if (!is_index_inserted) {
+          // detect multiple index map to same tuple
+          txn->SetTainted();
+          throw ExecutionException("detect write-write conflict!");
+          return false;
+        }
+      }
     }
+    // insert current tuple
   }
   if (!is_inserted_) {
     is_inserted_ = true;
