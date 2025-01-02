@@ -70,14 +70,18 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       for (uint32_t i = 0; i < column_count; ++i) {
         modified_fields.emplace_back(true);
       }
-      auto prev_link = txn_mgr->GetUndoLink(*rid);
+
+      // check version link exists or not
+      std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(*rid);
       auto new_undo_log = UndoLog{false, modified_fields, *tuple, meta_ts, {}};
-      if (prev_link.has_value()) {
-        new_undo_log.prev_version_ = prev_link.value();
+      if(version_link.has_value()){
+        auto prev_link = version_link->prev_;
+        new_undo_log.prev_version_ = prev_link;
       }
-      // txn_mgr->
-      auto new_undo_link = txn->AppendUndoLog(new_undo_log);
-      txn_mgr->UpdateUndoLink(*rid, new_undo_link);
+
+      std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
+      auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+      txn_mgr->UpdateVersionLink(*rid, new_version_link);
       table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
     }
     txn->AppendWriteSet(table_info_->oid_, *rid);

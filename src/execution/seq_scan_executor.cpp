@@ -51,7 +51,6 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     auto result_tuple = tuple_pair.second;
     // added at P4T2.2
     // Reconstruct tuple according to read timestamp
-    // auto txn_tmp_ts = txn->GetTransactionTempTs();
     auto txn_commit_ts = base_meta.ts_;
     auto txn_read_ts = txn->GetReadTs();
     auto txn_id = txn->GetTransactionId();
@@ -60,7 +59,13 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     // if tuple is modified by the current transaction, directly return
     // else do reconstruction
     if (txn_id != txn_commit_ts && txn_read_ts < txn_commit_ts) {
-      auto current_undo_link = txn_mgr->GetUndoLink(result_tuple.GetRid());
+      std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(result_tuple.GetRid());
+      // check version link exists or not
+      if(version_link == std::nullopt) {
+        table_iter_->operator++();
+        continue;
+      }
+      std::optional<UndoLink> current_undo_link = version_link->prev_;
       // is necessary to check valid???
       if (current_undo_link == std::nullopt || !current_undo_link->IsValid()) {
         table_iter_->operator++();

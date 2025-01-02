@@ -65,7 +65,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       *rid = opt_rid.value();
       txn->AppendWriteSet(table_info_->oid_, *rid);
       // just set check function to 'nullptr' to skip Write-Write conflict detection
-      txn_mgr->UpdateUndoLink(*rid, std::nullopt, nullptr);
+      txn_mgr->UpdateVersionLink(*rid, std::nullopt, nullptr);
       ++inserted_tuple_count;
     } else {
       // update all index for current tuple
@@ -91,7 +91,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         *rid = opt_rid.value();
         txn->AppendWriteSet(table_info_->oid_, *rid);
         // just set check function to 'nullptr' to skip Write-Write conflict detection
-        txn_mgr->UpdateUndoLink(*rid, std::nullopt, nullptr);
+        txn_mgr->UpdateVersionLink(*rid, std::nullopt, nullptr);
         ++inserted_tuple_count;
 
         bool is_index_inserted = index_info->index_->InsertEntry(target_key, *rid, nullptr);

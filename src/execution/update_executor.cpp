@@ -84,9 +84,10 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // check if tuple is being modified
     if (meta_ts >= TXN_START_ID) {
       if (meta_ts == txn_id) {
-        auto prev_link = txn_mgr->GetUndoLink(old_rid);
-        if (prev_link.has_value()) {
-          auto header_log = txn_mgr->GetUndoLog(prev_link.value());
+        // auto prev_link = txn_mgr->GetUndoLink(old_rid);
+        auto version_link = txn_mgr->GetVersionLink(old_rid);
+        if (version_link.has_value()) {
+          auto header_log = txn_mgr->GetUndoLog(version_link->prev_);
           // get old partial schema
           std::vector<Column> old_partial_columns;
           auto old_column_count = schema.GetColumnCount();
@@ -126,7 +127,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
           header_log.modified_fields_ = modified_fields;
           header_log.tuple_ = partial_tuple;
           LOG_DEBUG("header log after %s", header_log.tuple_.ToString(&partial_schema).c_str());
-          txn->ModifyUndoLog(prev_link->prev_log_idx_, header_log);
+          txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
         }
         // update old tuple
         table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);
@@ -150,13 +151,15 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       }
       auto partial_schema = Schema{columns};
       auto partial_tuple = Tuple{values, &partial_schema};
-      auto prev_link = txn_mgr->GetUndoLink(old_rid);
+      std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(old_rid);
       auto new_undo_log = UndoLog{false, modified_fields, partial_tuple, meta_ts, {}};
-      if (prev_link.has_value()) {
-        new_undo_log.prev_version_ = prev_link.value();
+      if(version_link.has_value()){
+        auto prev_link = version_link->prev_;
+        new_undo_log.prev_version_ = prev_link;
       }
-      auto new_undo_link = txn->AppendUndoLog(new_undo_log);
-      txn_mgr->UpdateUndoLink(old_rid, new_undo_link);
+      std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
+      auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+      txn_mgr->UpdateVersionLink(old_rid, new_version_link);
       table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);
     }
     txn->AppendWriteSet(table_info_->oid_, old_rid);
