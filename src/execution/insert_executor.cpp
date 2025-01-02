@@ -56,6 +56,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     auto txn = exec_ctx_->GetTransaction();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
     auto tmp_ts = txn->GetTransactionTempTs();
+
     // check index exists or not
     if (index_info_vector_.empty()) {
       auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
@@ -77,10 +78,17 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
         if (index_info->is_primary_key_) {
           index_info->index_->ScanKey(target_key, &found_rids, nullptr);
-          if (!found_rids.empty()) {
-            // maintain primary key index
-            txn->SetTainted();
-            throw ExecutionException("detect write-write conflict!");
+          // check target index exists or not
+          if (!found_rids.empty() ) {
+            RID pk_rid = found_rids[0];
+            auto is_tuple_deleted = table_info_->table_->GetTupleMeta(pk_rid).is_deleted_;
+            // if there is undeleted tuple in table heap, do abort.
+            if(!is_tuple_deleted){
+              txn->SetTainted();
+              throw ExecutionException("[InsertExecutor] mapped tuple has existed!");
+            }
+            table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, pk_rid);
+            continue;            
           }
         }
 
@@ -98,7 +106,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         if (!is_index_inserted) {
           // detect multiple index map to same tuple
           txn->SetTainted();
-          throw ExecutionException("detect write-write conflict!");
+          throw ExecutionException("[InsertExecutor] Write-Write conflict: multiple indexes map to same tuple!");
           return false;
         }
       }

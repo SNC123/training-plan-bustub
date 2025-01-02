@@ -9,7 +9,7 @@
 // Copyright (c) 2015-2021, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-#define LOG_LEVEL LOG_LEVEL_OFF
+// #define LOG_LEVEL LOG_LEVEL_OFF
 #include "execution/executors/update_executor.h"
 #include <cstdint>
 #include <memory>
@@ -51,9 +51,6 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // delete old tuple(just set is_deleted to true)
     auto old_rid = *rid;
     auto old_tuple = *tuple;
-    // LOG_DEBUG("delete tuple: %s", old_tuple.ToString(&schema).c_str());
-    // table_info_->table_->UpdateTupleMeta({tmp_ts, true}, old_rid);
-    // LOG_DEBUG("delete rid: %s", rid->ToString().c_str());
     // create new tuple
     std::vector<Value> values{};
     values.reserve(schema.GetColumnCount());
@@ -63,20 +60,11 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     }
     *tuple = Tuple(values, &schema);
     LOG_DEBUG("new tuple: %s", tuple->ToString(&schema).c_str());
-    // insert new tuple
-    // auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
-    // if (!opt_rid.has_value()) {
-    //   return false;
-    // }
-    // *rid = opt_rid.value();
-    // LOG_DEBUG("created rid: %s", rid->ToString().c_str());
-    // ++updated_tuple_count;
-    // LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
 
     // if tuple is not in table heap, it must be write-write conflict (think carefully!!!)
     if (old_tuple.GetRid().GetPageId() == INVALID_PAGE_ID) {
       txn->SetTainted();
-      throw ExecutionException("Detect write-write conflict !");
+      throw ExecutionException("[UpdateExecutor] Detect write-write conflict!");
     }
 
     auto meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
@@ -127,7 +115,8 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
           header_log.modified_fields_ = modified_fields;
           header_log.tuple_ = partial_tuple;
           LOG_DEBUG("header log after %s", header_log.tuple_.ToString(&partial_schema).c_str());
-          txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
+          auto header_log_txn = txn_mgr->txn_map_[version_link->prev_.prev_txn_];
+          header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
         }
         // update old tuple
         table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);

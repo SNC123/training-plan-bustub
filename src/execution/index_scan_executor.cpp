@@ -112,14 +112,14 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (plan_->filter_predicate_ != nullptr) {
       auto filter_expr = plan_->filter_predicate_;
       auto schema = table_info_->schema_;
-      auto value = filter_expr->Evaluate(&tuple_pair.second, schema);
+      auto value = filter_expr->Evaluate(&result_tuple, schema);
       // why Value is used in this way?
       if (!value.IsNull() && !value.GetAs<bool>()) {
         ++cursor_;
         continue;
       }
     }
-    *tuple = tuple_pair.second;
+    *tuple = result_tuple;
     *rid = rid_results_[cursor_];
     ++cursor_;
     return true;

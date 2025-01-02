@@ -62,7 +62,17 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
   // store all outputs in a string to avoid being divided into several blocks
   std::string result_string;
   fmt::println(stderr, "debug_hook: {}", info);
-
+  for(const auto& txn_iter : txn_mgr->txn_map_){
+    auto log_num = txn_iter.second->GetUndoLogNum();
+    if(log_num > 0) {
+      auto txn_str = fmt::format("txn{}:\n", (txn_iter.first^TXN_START_ID) );
+      result_string += txn_str;
+    }
+    for(size_t idx=0; idx<log_num; ++idx){
+      auto log_str = fmt::format("idx:{} ts:{}\n", idx, txn_iter.second->GetUndoLog(idx).ts_);
+      result_string += log_str;
+    }
+  }
   auto table_iter = table_heap->MakeIterator();
   while (!table_iter.IsEnd()) {
     auto rid = table_iter.GetRID();
