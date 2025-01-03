@@ -90,7 +90,13 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
             // deleted tuple -> inserted tuple (in place)
             auto old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
             table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, pk_rid);
-            // insert delete undolog
+            txn->AppendWriteSet(table_info_->oid_, pk_rid);
+            // if deleted by self, no log(think carefully!!!)
+            // bustub tests fail to detect this.
+            if (old_meta_ts == txn->GetTransactionId()) {
+              continue;
+            }
+            // else insert delete undolog
             std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(pk_rid);
             auto column_count = schema.GetColumnCount();
             std::vector<bool> modified_fields(column_count);
@@ -106,7 +112,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
             std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
             auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
             txn_mgr->UpdateVersionLink(pk_rid, new_version_link);
-            txn->AppendWriteSet(table_info_->oid_, pk_rid);
+
             continue;
           }
         }
