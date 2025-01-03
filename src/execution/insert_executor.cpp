@@ -87,7 +87,27 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
               txn->SetTainted();
               throw ExecutionException("[InsertExecutor] mapped tuple has existed!");
             }
+            // deleted tuple -> inserted tuple (in place)
+            auto old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
             table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, pk_rid);
+            // insert delete undolog
+            std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(pk_rid);
+            auto column_count = schema.GetColumnCount();
+            std::vector<bool> modified_fields(column_count);
+            std::vector<Value> values(column_count);
+            for(size_t idx=0; idx<column_count; ++idx) {
+              modified_fields[idx] = false;
+              // values[idx] = ValueFactory::GetNullValueByType(TypeId type_id)
+            }
+            
+            auto new_undo_log = UndoLog{true, modified_fields, {}, old_meta_ts, {}};
+            if(version_link.has_value()){
+              auto prev_link = version_link->prev_;
+              new_undo_log.prev_version_ = prev_link;
+            }
+            std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
+            auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+            txn_mgr->UpdateVersionLink(pk_rid, new_version_link);          
             continue;            
           }
         }

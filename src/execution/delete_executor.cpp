@@ -52,7 +52,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // if tuple is not in table heap, it must be write-write conflict (think carefully!!!)
     if (tuple->GetRid().GetPageId() == INVALID_PAGE_ID) {
       txn->SetTainted();
-      throw ExecutionException("[DeleteExecutor] Detect write-write conflict!");
+      throw ExecutionException("[DeleteExecutor] Detect write-write conflict !");
     }
 
     auto meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
