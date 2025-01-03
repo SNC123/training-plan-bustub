@@ -142,7 +142,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       auto partial_tuple = Tuple{values, &partial_schema};
       std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(old_rid);
       auto new_undo_log = UndoLog{false, modified_fields, partial_tuple, meta_ts, {}};
-      if(version_link.has_value()){
+      if (version_link.has_value()) {
         auto prev_link = version_link->prev_;
         new_undo_log.prev_version_ = prev_link;
       }

@@ -11,12 +11,12 @@
 //===----------------------------------------------------------------------===//
 #include <optional>
 #define LOG_LEVEL LOG_LEVEL_OFF
-#include "execution/execution_common.h"
-#include "execution/executors/index_scan_executor.h"
 #include "catalog/schema.h"
 #include "common/logger.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
+#include "execution/execution_common.h"
+#include "execution/executors/index_scan_executor.h"
 
 namespace bustub {
 IndexScanExecutor::IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanPlanNode *plan)
@@ -61,7 +61,7 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (txn_id != txn_commit_ts && txn_read_ts < txn_commit_ts) {
       std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(result_tuple.GetRid());
       // check version link exists or not
-      if(version_link == std::nullopt) {
+      if (version_link == std::nullopt) {
         ++cursor_;
         continue;
       }

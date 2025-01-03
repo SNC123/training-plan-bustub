@@ -79,11 +79,11 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         if (index_info->is_primary_key_) {
           index_info->index_->ScanKey(target_key, &found_rids, nullptr);
           // check target index exists or not
-          if (!found_rids.empty() ) {
+          if (!found_rids.empty()) {
             RID pk_rid = found_rids[0];
             auto is_tuple_deleted = table_info_->table_->GetTupleMeta(pk_rid).is_deleted_;
             // if there is undeleted tuple in table heap, do abort.
-            if(!is_tuple_deleted){
+            if (!is_tuple_deleted) {
               txn->SetTainted();
               throw ExecutionException("[InsertExecutor] mapped tuple has existed!");
             }
@@ -95,20 +95,19 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
             auto column_count = schema.GetColumnCount();
             std::vector<bool> modified_fields(column_count);
             std::vector<Value> values(column_count);
-            for(size_t idx=0; idx<column_count; ++idx) {
+            for (size_t idx = 0; idx < column_count; ++idx) {
               modified_fields[idx] = false;
-              // values[idx] = ValueFactory::GetNullValueByType(TypeId type_id)
             }
-            
             auto new_undo_log = UndoLog{true, modified_fields, {}, old_meta_ts, {}};
-            if(version_link.has_value()){
+            if (version_link.has_value()) {
               auto prev_link = version_link->prev_;
               new_undo_log.prev_version_ = prev_link;
             }
             std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
             auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
-            txn_mgr->UpdateVersionLink(pk_rid, new_version_link);          
-            continue;            
+            txn_mgr->UpdateVersionLink(pk_rid, new_version_link);
+            txn->AppendWriteSet(table_info_->oid_, pk_rid);
+            continue;
           }
         }
 

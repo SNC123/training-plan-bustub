@@ -61,7 +61,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (txn_id != txn_commit_ts && txn_read_ts < txn_commit_ts) {
       std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(result_tuple.GetRid());
       // check version link exists or not
-      if(version_link == std::nullopt) {
+      if (version_link == std::nullopt) {
         table_iter_->operator++();
         continue;
       }

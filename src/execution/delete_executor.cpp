@@ -74,7 +74,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       // check version link exists or not
       std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(*rid);
       auto new_undo_log = UndoLog{false, modified_fields, *tuple, meta_ts, {}};
-      if(version_link.has_value()){
+      if (version_link.has_value()) {
         auto prev_link = version_link->prev_;
         new_undo_log.prev_version_ = prev_link;
       }
@@ -89,7 +89,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     ++deleted_tuple_count;
     LOG_DEBUG("index_info size: %zu", index_info_vector_.size());
     // after P4T4.2(included), we don't need to delete index.
-    
+
     // update all index for current tuple
     // for (auto index_info : index_info_vector_) {
     //   auto key_schema = index_info->key_schema_;
