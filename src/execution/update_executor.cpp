@@ -9,11 +9,12 @@
 // Copyright (c) 2015-2021, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-// #define LOG_LEVEL LOG_LEVEL_OFF
+#define LOG_LEVEL LOG_LEVEL_OFF
 #include "execution/executors/update_executor.h"
 #include <cstdint>
 #include <memory>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "binder/tokens.h"
@@ -88,8 +89,10 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         ++expr_col_idx;
         continue;
       }
-      if (target_expression->children_.size() >= 2) {
-        LOG_DEBUG("target expr: %s", target_expression->ToString().c_str());
+      std::string target_expr = target_expression->ToString();
+      std::string unupdated_target_expr = "#0." + std::to_string(pk_col_idx);
+      LOG_DEBUG("target expr: %s, unupdated_expr:%s ", target_expr.c_str(), unupdated_target_expr.c_str());
+      if (target_expr != unupdated_target_expr) {
         is_pk_col_updated = true;
         break;
       }
@@ -97,7 +100,6 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     }
   }
 
-  child_executor_->Init();
   if (!is_pk_col_updated) {
     // update non-primary key column(before P4T4.3)
     while (child_executor_->Next(tuple, rid)) {
@@ -257,8 +259,8 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       auto new_key = new_tuple.KeyFromTuple(schema, key_schema, key_attrs);
       LOG_DEBUG("new key: %s", new_key.ToString(&key_schema).c_str());
       new_keys.emplace_back(new_key);
-      HashFunction<Tuple> hasher;
-      auto new_key_hash = hasher.GetHash(new_key);
+      HashFunction<std::string> hasher;
+      auto new_key_hash = hasher.GetHash(new_key.ToString(&key_schema));
       LOG_DEBUG("new key hash: %ld", new_key_hash);
       if (new_keys_hashset.find(new_key_hash) != new_keys_hashset.end()) {
         is_new_keys_unique = false;
