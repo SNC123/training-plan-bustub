@@ -9,10 +9,12 @@
 // Copyright (c) 2015-2021, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
+#define LOG_LEVEL LOG_LEVEL_OFF
 #include <cstdint>
 #include "common/config.h"
 #include "common/exception.h"
-#define LOG_LEVEL LOG_LEVEL_OFF
+#include "execution/execution_common.h"
+
 #include <memory>
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
@@ -60,29 +62,87 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // check if tuple is being modified
     if (meta_ts >= TXN_START_ID) {
       if (meta_ts == txn_id) {
+        auto version_link = txn_mgr->GetVersionLink(*rid);
+        if (version_link.has_value()) {
+          auto header_log = txn_mgr->GetUndoLog(version_link->prev_);
+          // get old partial schema
+          std::vector<Column> old_partial_columns;
+          auto old_column_count = schema.GetColumnCount();
+          for (uint32_t idx = 0; idx < old_column_count; idx++) {
+            if (header_log.modified_fields_[idx]) {
+              old_partial_columns.emplace_back(schema.GetColumn(idx));
+            }
+          }
+          auto old_partial_schema = Schema{old_partial_columns};
+          LOG_DEBUG("header log before %s", header_log.tuple_.ToString(&old_partial_schema).c_str());
+          // only add new column
+          std::vector<bool> modified_fields;
+          const auto column_count = schema.GetColumnCount();
+          auto old_partial_count = 0;
+          std::vector<Value> values;
+          std::vector<Column> columns;
+          for (uint32_t idx = 0; idx < column_count; ++idx) {
+            if (header_log.modified_fields_[idx]) {
+              modified_fields.emplace_back(true);
+              values.emplace_back(header_log.tuple_.GetValue(&old_partial_schema, old_partial_count));
+              columns.emplace_back(old_partial_schema.GetColumn(old_partial_count));
+              old_partial_count++;
+            } else {
+              auto old_value = tuple->GetValue(&schema, idx);
+              auto new_value = tuple->GetValue(&schema, idx);
+              if (!old_value.CompareExactlyEquals(new_value)) {
+                modified_fields.emplace_back(true);
+                values.emplace_back(old_value);
+                columns.emplace_back(schema.GetColumn(idx));
+              } else {
+                modified_fields.emplace_back(false);
+              }
+            }
+          }
+          auto partial_schema = Schema{columns};
+          auto partial_tuple = Tuple{values, &partial_schema};
+          header_log.modified_fields_ = modified_fields;
+          header_log.tuple_ = partial_tuple;
+          LOG_DEBUG("header log after %s", header_log.tuple_.ToString(&partial_schema).c_str());
+          auto header_log_txn = txn_mgr->txn_map_[version_link->prev_.prev_txn_];
+          header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
+        }
         // delete old tuple(just set is_deleted to true)
         table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
       }
     } else {
+      // check version link exists or not
+      bool is_locked = LockVersionLink(txn_mgr, *rid);
+      if(!is_locked) {
+        txn->SetTainted();
+        throw ExecutionException("[DeleteExecutor] other threads are using version link !");              
+      }
+      if(IsWriteWriteConflict(txn, meta_ts)) {
+        UnlockVersionLink(txn_mgr, *rid);
+        txn->SetTainted();
+        throw ExecutionException("[DeleteExecutor] write-write conflict!");               
+      }      
+
       // insert one log with full columns into link
       std::vector<bool> modified_fields;
       auto column_count = table_info_->schema_.GetColumnCount();
       for (uint32_t i = 0; i < column_count; ++i) {
         modified_fields.emplace_back(true);
       }
-
-      // check version link exists or not
-      std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(*rid);
       auto new_undo_log = UndoLog{false, modified_fields, *tuple, meta_ts, {}};
-      if (version_link.has_value()) {
-        auto prev_link = version_link->prev_;
-        new_undo_log.prev_version_ = prev_link;
+      if(txn_mgr->GetUndoLink(*rid).has_value()) {
+        new_undo_log.prev_version_ = txn_mgr->GetUndoLink(*rid).value();
       }
-
+      // if (version_link.has_value()) {
+      //   auto prev_link = version_link->prev_;
+      //   new_undo_log.prev_version_ = prev_link;
+      // }
       std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
       auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+      new_version_link->in_progress_ = true;
       txn_mgr->UpdateVersionLink(*rid, new_version_link);
       table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
+      UnlockVersionLink(txn_mgr, *rid);
     }
     txn->AppendWriteSet(table_info_->oid_, *rid);
 

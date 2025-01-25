@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #define LOG_LEVEL LOG_LEVEL_OFF
+#include "execution/execution_common.h"
 #include "execution/executors/update_executor.h"
 #include <cstdint>
 #include <memory>
@@ -178,6 +179,16 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
           table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);
         }
       } else {
+        bool is_locked = LockVersionLink(txn_mgr, old_rid);
+        if(!is_locked) {
+          txn->SetTainted();
+          throw ExecutionException("[UpdateExecutor] other threads are using version link !");              
+        }
+        if(IsWriteWriteConflict(txn, meta_ts)) {
+          UnlockVersionLink(txn_mgr, old_rid);
+          txn->SetTainted();
+          throw ExecutionException("[UpdateExecutor] write-write conflict!");               
+        }     
         // insert one log with partial columns into link
         std::vector<bool> modified_fields;
         auto column_count = table_info_->schema_.GetColumnCount();
@@ -196,35 +207,40 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         }
         auto partial_schema = Schema{columns};
         auto partial_tuple = Tuple{values, &partial_schema};
-        std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(old_rid);
+        
         auto new_undo_log = UndoLog{false, modified_fields, partial_tuple, meta_ts, {}};
-        if (version_link.has_value()) {
-          auto prev_link = version_link->prev_;
-          new_undo_log.prev_version_ = prev_link;
+        if(txn_mgr->GetUndoLink(old_rid).has_value()) {
+          new_undo_log.prev_version_ = txn_mgr->GetUndoLink(old_rid).value();
         }
+        // if (version_link.has_value()) {
+        //   auto prev_link = version_link->prev_;
+        //   new_undo_log.prev_version_ = prev_link;
+        // }
         std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
         auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+        new_version_link->in_progress_ = true;
         txn_mgr->UpdateVersionLink(old_rid, new_version_link);
         table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);
+        UnlockVersionLink(txn_mgr, old_rid);
       }
       txn->AppendWriteSet(table_info_->oid_, old_rid);
 
       // update all index for current tuple
-      for (auto index_info : index_info_vector_) {
-        LOG_DEBUG("index_info: %s", index_info->key_schema_.ToString().c_str());
-        auto key_schema = index_info->key_schema_;
-        auto key_attrs = index_info->index_->GetKeyAttrs();
-        LOG_DEBUG("delete index :");
-        // deleted index
-        index_info->index_->DeleteEntry(old_tuple.KeyFromTuple(schema, key_schema, key_attrs), old_rid, nullptr);
-        // created index
-        LOG_DEBUG("create index :");
-        bool is_index_created =
-            index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
-        if (!is_index_created) {
-          return false;
-        }
-      }
+      // for (auto index_info : index_info_vector_) {
+      //   LOG_DEBUG("index_info: %s", index_info->key_schema_.ToString().c_str());
+      //   auto key_schema = index_info->key_schema_;
+      //   auto key_attrs = index_info->index_->GetKeyAttrs();
+      //   LOG_DEBUG("delete index :");
+      //   // deleted index
+      //   index_info->index_->DeleteEntry(old_tuple.KeyFromTuple(schema, key_schema, key_attrs), old_rid, nullptr);
+      //   // created index
+      //   LOG_DEBUG("create index :");
+      //   bool is_index_created =
+      //       index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
+      //   if (!is_index_created) {
+      //     return false;
+      //   }
+      // }
       ++updated_tuple_count;
     }
   } else {
@@ -377,8 +393,8 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         }
         std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
         auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+        new_version_link->in_progress_ = true;
         txn_mgr->UpdateVersionLink(pk_rid, new_version_link);
-
         continue;
       }
 
