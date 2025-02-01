@@ -9,8 +9,9 @@
 // Copyright (c) 2015-2021, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
+#include <cstdio>
+#include "fmt/core.h"
 #define LOG_LEVEL LOG_LEVEL_OFF
-#include "execution/execution_common.h"
 #include "execution/executors/update_executor.h"
 #include <cstdint>
 #include <memory>
@@ -25,6 +26,7 @@
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
 #include "container/hash/hash_function.h"
+#include "execution/execution_common.h"
 #include "execution/expressions/constant_value_expression.h"
 #include "storage/table/tuple.h"
 #include "type/type.h"
@@ -66,9 +68,9 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   auto schema = table_info_->schema_;
   // txn information
   auto txn = exec_ctx_->GetTransaction();
-  auto txn_id = txn->GetTransactionId();
+  // auto txn_id = txn->GetTransactionId();
   auto txn_mgr = exec_ctx_->GetTransactionManager();
-  auto tmp_ts = txn->GetTransactionTempTs();
+  // auto tmp_ts = txn->GetTransactionTempTs();
   // pk infomation
   bool is_pk_col_updated = false;
   int32_t pk_col_idx = -1;
@@ -128,7 +130,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       // auto read_ts = txn->GetReadTs();
       // check if tuple is being modified
       if (meta_ts >= TXN_START_ID) {
-        if (meta_ts == txn_id) {
+        if (meta_ts == txn->GetTransactionId()) {
           // auto prev_link = txn_mgr->GetUndoLink(old_rid);
           auto version_link = txn_mgr->GetVersionLink(old_rid);
           if (version_link.has_value()) {
@@ -176,19 +178,26 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
             header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
           }
           // update old tuple
-          table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);
+          table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, *tuple, old_rid);
         }
       } else {
-        bool is_locked = LockVersionLink(txn_mgr, old_rid);
-        if(!is_locked) {
-          txn->SetTainted();
-          throw ExecutionException("[UpdateExecutor] other threads are using version link !");              
-        }
-        if(IsWriteWriteConflict(txn, meta_ts)) {
+        meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
+        if (IsWriteWriteConflict(txn, meta_ts)) {
           UnlockVersionLink(txn_mgr, old_rid);
           txn->SetTainted();
-          throw ExecutionException("[UpdateExecutor] write-write conflict!");               
-        }     
+          throw ExecutionException("[UpdateExecutor] write-write conflict!");
+        }
+        bool is_locked = LockVersionLink(txn_mgr, old_rid);
+        if (!is_locked) {
+          txn->SetTainted();
+          throw ExecutionException("[UpdateExecutor] other threads are using version link !");
+        }
+        meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
+        if (IsWriteWriteConflict(txn, meta_ts)) {
+          UnlockVersionLink(txn_mgr, old_rid);
+          txn->SetTainted();
+          throw ExecutionException("[UpdateExecutor] write-write conflict!");
+        }
         // insert one log with partial columns into link
         std::vector<bool> modified_fields;
         auto column_count = table_info_->schema_.GetColumnCount();
@@ -207,9 +216,9 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         }
         auto partial_schema = Schema{columns};
         auto partial_tuple = Tuple{values, &partial_schema};
-        
+        meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
         auto new_undo_log = UndoLog{false, modified_fields, partial_tuple, meta_ts, {}};
-        if(txn_mgr->GetUndoLink(old_rid).has_value()) {
+        if (txn_mgr->GetUndoLink(old_rid).has_value()) {
           new_undo_log.prev_version_ = txn_mgr->GetUndoLink(old_rid).value();
         }
         // if (version_link.has_value()) {
@@ -220,27 +229,11 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
         new_version_link->in_progress_ = true;
         txn_mgr->UpdateVersionLink(old_rid, new_version_link);
-        table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, old_rid);
+        table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, *tuple, old_rid);
         UnlockVersionLink(txn_mgr, old_rid);
       }
       txn->AppendWriteSet(table_info_->oid_, old_rid);
 
-      // update all index for current tuple
-      // for (auto index_info : index_info_vector_) {
-      //   LOG_DEBUG("index_info: %s", index_info->key_schema_.ToString().c_str());
-      //   auto key_schema = index_info->key_schema_;
-      //   auto key_attrs = index_info->index_->GetKeyAttrs();
-      //   LOG_DEBUG("delete index :");
-      //   // deleted index
-      //   index_info->index_->DeleteEntry(old_tuple.KeyFromTuple(schema, key_schema, key_attrs), old_rid, nullptr);
-      //   // created index
-      //   LOG_DEBUG("create index :");
-      //   bool is_index_created =
-      //       index_info->index_->InsertEntry(tuple->KeyFromTuple(schema, key_schema, key_attrs), *rid, nullptr);
-      //   if (!is_index_created) {
-      //     return false;
-      //   }
-      // }
       ++updated_tuple_count;
     }
   } else {
@@ -327,9 +320,9 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       auto old_rid = old_tuple.GetRid();
       auto meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
       if (meta_ts >= TXN_START_ID) {
-        if (meta_ts == txn_id) {
+        if (meta_ts == txn->GetTransactionId()) {
           // delete old tuple(just set is_deleted to true)
-          table_info_->table_->UpdateTupleMeta({tmp_ts, true}, old_rid);
+          table_info_->table_->UpdateTupleMeta({txn->GetTransactionTempTs(), true}, old_rid);
         }
       } else {
         // insert one log with full columns into link
@@ -349,7 +342,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
         auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
         txn_mgr->UpdateVersionLink(old_rid, new_version_link);
-        table_info_->table_->UpdateTupleMeta({tmp_ts, true}, old_rid);
+        table_info_->table_->UpdateTupleMeta({txn->GetTransactionTempTs(), true}, old_rid);
       }
       txn->AppendWriteSet(table_info_->oid_, old_rid);
     }
@@ -371,7 +364,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         }
         // deleted tuple -> inserted tuple (in place)
         auto old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
-        table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, new_tuple, pk_rid);
+        table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, new_tuple, pk_rid);
         txn->AppendWriteSet(table_info_->oid_, pk_rid);
         // if deleted by self, no log(think carefully!!!)
         // bustub tests fail to detect this.
@@ -398,7 +391,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         continue;
       }
 
-      auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, new_tuple);
+      auto opt_rid = table_info_->table_->InsertTuple({txn->GetTransactionTempTs(), false}, new_tuple);
       if (!opt_rid.has_value()) {
         return false;
       }

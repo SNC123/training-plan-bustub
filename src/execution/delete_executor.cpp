@@ -47,9 +47,9 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
     // modified at P4T3.3
     auto txn = exec_ctx_->GetTransaction();
-    auto txn_id = txn->GetTransactionId();
+    // auto txn_id = txn->GetTransactionId();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
-    auto tmp_ts = txn->GetTransactionTempTs();
+    // auto tmp_ts = txn->GetTransactionTempTs();
 
     // if tuple is not in table heap, it must be write-write conflict (think carefully!!!)
     if (tuple->GetRid().GetPageId() == INVALID_PAGE_ID) {
@@ -61,7 +61,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     // auto read_ts = txn->GetReadTs();
     // check if tuple is being modified
     if (meta_ts >= TXN_START_ID) {
-      if (meta_ts == txn_id) {
+      if (meta_ts == txn->GetTransactionId()) {
         auto version_link = txn_mgr->GetVersionLink(*rid);
         if (version_link.has_value()) {
           auto header_log = txn_mgr->GetUndoLog(version_link->prev_);
@@ -108,20 +108,28 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
           header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
         }
         // delete old tuple(just set is_deleted to true)
-        table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
+        // tmp_ts = txn->GetTransactionTempTs();
+        table_info_->table_->UpdateTupleMeta({txn->GetTransactionTempTs(), true}, *rid);
       }
     } else {
-      // check version link exists or not
-      bool is_locked = LockVersionLink(txn_mgr, *rid);
-      if(!is_locked) {
-        txn->SetTainted();
-        throw ExecutionException("[DeleteExecutor] other threads are using version link !");              
-      }
-      if(IsWriteWriteConflict(txn, meta_ts)) {
+      meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
+      if (IsWriteWriteConflict(txn, meta_ts)) {
         UnlockVersionLink(txn_mgr, *rid);
         txn->SetTainted();
-        throw ExecutionException("[DeleteExecutor] write-write conflict!");               
-      }      
+        throw ExecutionException("[DeleteExecutor] write-write conflict!");
+      }
+      // check version link exists or not
+      bool is_locked = LockVersionLink(txn_mgr, *rid);
+      if (!is_locked) {
+        txn->SetTainted();
+        throw ExecutionException("[DeleteExecutor] other threads are using version link !");
+      }
+      meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
+      if (IsWriteWriteConflict(txn, meta_ts)) {
+        UnlockVersionLink(txn_mgr, *rid);
+        txn->SetTainted();
+        throw ExecutionException("[DeleteExecutor] write-write conflict!");
+      }
 
       // insert one log with full columns into link
       std::vector<bool> modified_fields;
@@ -129,8 +137,9 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       for (uint32_t i = 0; i < column_count; ++i) {
         modified_fields.emplace_back(true);
       }
+      meta_ts = table_info_->table_->GetTupleMeta(*rid).ts_;
       auto new_undo_log = UndoLog{false, modified_fields, *tuple, meta_ts, {}};
-      if(txn_mgr->GetUndoLink(*rid).has_value()) {
+      if (txn_mgr->GetUndoLink(*rid).has_value()) {
         new_undo_log.prev_version_ = txn_mgr->GetUndoLink(*rid).value();
       }
       // if (version_link.has_value()) {
@@ -141,7 +150,8 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
       new_version_link->in_progress_ = true;
       txn_mgr->UpdateVersionLink(*rid, new_version_link);
-      table_info_->table_->UpdateTupleMeta({tmp_ts, true}, *rid);
+      // tmp_ts = txn->GetTransactionTempTs();
+      table_info_->table_->UpdateTupleMeta({txn->GetTransactionTempTs(), true}, *rid);
       UnlockVersionLink(txn_mgr, *rid);
     }
     txn->AppendWriteSet(table_info_->oid_, *rid);

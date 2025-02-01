@@ -161,33 +161,31 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
 }
 
 // atomic set in_progress in version link
-auto LockVersionLink(TransactionManager* txn_mgr, RID rid) -> bool {
-  std::optional<VersionUndoLink> version_link= txn_mgr->GetVersionLink(rid);
-  if(version_link.has_value()) {
-    return txn_mgr->UpdateVersionLink(rid, VersionUndoLink{version_link->prev_,true},
-  [version_link](std::optional<VersionUndoLink> origin_version_link) -> bool {
-          // To ensure version link avaliable and unchanged
-          return origin_version_link.has_value() && !origin_version_link->in_progress_ && origin_version_link->prev_ == version_link->prev_;
-        }
-      );
+auto LockVersionLink(TransactionManager *txn_mgr, RID rid) -> bool {
+  std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(rid);
+  if (version_link.has_value()) {
+    return txn_mgr->UpdateVersionLink(rid, VersionUndoLink{version_link->prev_, true},
+                                      [version_link](std::optional<VersionUndoLink> origin_version_link) -> bool {
+                                        // To ensure version link avaliable and unchanged
+                                        return origin_version_link.has_value() && !origin_version_link->in_progress_ &&
+                                               origin_version_link->prev_ == version_link->prev_;
+                                      });
   }
-  return txn_mgr->UpdateVersionLink(rid, {VersionUndoLink{UndoLink{},true}},
-    [](std::optional<VersionUndoLink> origin_version_link) -> bool {
-      return !origin_version_link.has_value();
-    }
-  );
+  return txn_mgr->UpdateVersionLink(
+      rid, {VersionUndoLink{UndoLink{}, true}},
+      [](std::optional<VersionUndoLink> origin_version_link) -> bool { return !origin_version_link.has_value(); });
 }
 // atomic unset in_progress in version link
-auto UnlockVersionLink(TransactionManager* txn_mgr, RID rid) -> bool {
-  std::optional<VersionUndoLink> version_link= txn_mgr->GetVersionLink(rid);
-  if(version_link.has_value()) {
-    return txn_mgr->UpdateVersionLink(rid, VersionUndoLink{version_link->prev_,false});
+auto UnlockVersionLink(TransactionManager *txn_mgr, RID rid) -> bool {
+  std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(rid);
+  if (version_link.has_value()) {
+    return txn_mgr->UpdateVersionLink(rid, VersionUndoLink{version_link->prev_, false});
   }
   LOG_INFO("[UnlockVersionLink] Unlock failed....You are unlocking EMPTY verion link");
   return false;
 }
 
-auto IsWriteWriteConflict(Transaction* txn, timestamp_t meta_ts) -> bool {
+auto IsWriteWriteConflict(Transaction *txn, timestamp_t meta_ts) -> bool {
   return meta_ts != txn->GetTransactionTempTs() && meta_ts > txn->GetReadTs();
 }
 }  // namespace bustub

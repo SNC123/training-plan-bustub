@@ -53,14 +53,13 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   auto schema = table_info_->schema_;
   // pull tuple until empty
   while (child_executor_->Next(tuple, rid)) {
-    // modified at P4T4.1
+    
     auto txn = exec_ctx_->GetTransaction();
     auto txn_mgr = exec_ctx_->GetTransactionManager();
-    auto tmp_ts = txn->GetTransactionTempTs();
 
     // check index exists or not
     if (index_info_vector_.empty()) {
-      auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
+      auto opt_rid = table_info_->table_->InsertTuple({txn->GetTransactionTempTs(), false}, *tuple);
       if (!opt_rid.has_value()) {
         return false;
       }
@@ -139,20 +138,26 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
                 header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
               }
               // update old tuple
-              table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, pk_rid);
+              table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, *tuple, pk_rid);
               txn->AppendWriteSet(table_info_->oid_, pk_rid);
               continue;
             }
-            if(IsWriteWriteConflict(txn, old_meta_ts)) {
+            old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
+            if (IsWriteWriteConflict(txn, old_meta_ts)) {
               UnlockVersionLink(txn_mgr, pk_rid);
               txn->SetTainted();
-              throw ExecutionException("[InsertExecutor] write-write conflict!");               
+              throw ExecutionException("[InsertExecutor] write-write conflict!");
             }
-
             bool is_locked = LockVersionLink(txn_mgr, pk_rid);
-            if(!is_locked) {
+            if (!is_locked) {
               txn->SetTainted();
-              throw ExecutionException("[InsertExecutor] other threads are using version link !");              
+              throw ExecutionException("[InsertExecutor] other threads are using version link !");
+            }
+            old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
+            if (IsWriteWriteConflict(txn, old_meta_ts)) {
+              UnlockVersionLink(txn_mgr, pk_rid);
+              txn->SetTainted();
+              throw ExecutionException("[InsertExecutor] write-write conflict!");
             }
             auto column_count = schema.GetColumnCount();
             std::vector<bool> modified_fields(column_count);
@@ -160,8 +165,9 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
             for (size_t idx = 0; idx < column_count; ++idx) {
               modified_fields[idx] = false;
             }
+            old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
             auto new_undo_log = UndoLog{true, modified_fields, {}, old_meta_ts, {}};
-            if(txn_mgr->GetUndoLink(pk_rid).has_value()) {
+            if (txn_mgr->GetUndoLink(pk_rid).has_value()) {
               new_undo_log.prev_version_ = txn_mgr->GetUndoLink(pk_rid).value();
             }
             // if (version_link.has_value()) {
@@ -172,14 +178,14 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
             auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
             new_version_link->in_progress_ = true;
             txn_mgr->UpdateVersionLink(pk_rid, new_version_link);
-            table_info_->table_->UpdateTupleInPlace({tmp_ts, false}, *tuple, pk_rid);
+            table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, *tuple, pk_rid);
             txn->AppendWriteSet(table_info_->oid_, pk_rid);
             UnlockVersionLink(txn_mgr, pk_rid);
             continue;
           }
         }
 
-        auto opt_rid = table_info_->table_->InsertTuple({tmp_ts, false}, *tuple);
+        auto opt_rid = table_info_->table_->InsertTuple({txn->GetTransactionTempTs(), false}, *tuple);
         if (!opt_rid.has_value()) {
           return false;
         }
