@@ -104,7 +104,9 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
                   }
                 }
                 auto old_partial_schema = Schema{old_partial_columns};
-                LOG_DEBUG("header log before %s", header_log.tuple_.ToString(&old_partial_schema).c_str());
+                // LOG_DEBUG("header log before %s", header_log.tuple_.ToString(&old_partial_schema).c_str());
+                // auto prev_txn = header_log.prev_version_.prev_txn_;
+                // LOG_DEBUG("prev_txn: %ld", prev_txn);
                 // only add new column
                 std::vector<bool> modified_fields;
                 const auto column_count = schema.GetColumnCount();
@@ -166,14 +168,15 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
               modified_fields[idx] = false;
             }
             old_meta_ts = table_info_->table_->GetTupleMeta(pk_rid).ts_;
-            auto new_undo_log = UndoLog{true, modified_fields, {}, old_meta_ts, {}};
-            if (txn_mgr->GetUndoLink(pk_rid).has_value()) {
-              new_undo_log.prev_version_ = txn_mgr->GetUndoLink(pk_rid).value();
-            }
-            // if (version_link.has_value()) {
-            //   auto prev_link = version_link->prev_;
-            //   new_undo_log.prev_version_ = prev_link;
+            auto new_undo_log = UndoLog{true, modified_fields, Tuple{}, old_meta_ts, UndoLink{}};
+            // if (txn_mgr->GetUndoLink(pk_rid).has_value()) {
+            //   new_undo_log.prev_version_ = txn_mgr->GetUndoLink(pk_rid).value();
             // }
+            std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(pk_rid);
+            if (version_link.has_value()) {
+              auto prev_link = version_link->prev_;
+              new_undo_log.prev_version_ = prev_link;
+            }
             std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
             auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
             new_version_link->in_progress_ = true;

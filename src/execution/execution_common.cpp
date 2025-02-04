@@ -71,7 +71,10 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
       result_string += txn_str;
     }
     for (size_t idx = 0; idx < log_num; ++idx) {
-      auto log_str = fmt::format("idx:{} ts:{}\n", idx, txn_iter.second->GetUndoLog(idx).ts_);
+      auto undo_log = txn_iter.second->GetUndoLog(idx);
+      auto log_str = fmt::format("idx:{} ts:{} prev_log idx:{} prev_txn:{} is_deleted:{}\n", 
+        idx, undo_log.ts_, undo_log.prev_version_.prev_log_idx_, undo_log.prev_version_.prev_txn_,undo_log.is_deleted_
+      );
       result_string += log_str;
     }
   }

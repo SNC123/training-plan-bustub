@@ -199,6 +199,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
           throw ExecutionException("[UpdateExecutor] write-write conflict!");
         }
         // insert one log with partial columns into link
+        old_tuple = table_info_->table_->GetTuple(old_rid).second;
         std::vector<bool> modified_fields;
         auto column_count = table_info_->schema_.GetColumnCount();
         std::vector<Value> values;
@@ -218,13 +219,14 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         auto partial_tuple = Tuple{values, &partial_schema};
         meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
         auto new_undo_log = UndoLog{false, modified_fields, partial_tuple, meta_ts, {}};
-        if (txn_mgr->GetUndoLink(old_rid).has_value()) {
-          new_undo_log.prev_version_ = txn_mgr->GetUndoLink(old_rid).value();
-        }
-        // if (version_link.has_value()) {
-        //   auto prev_link = version_link->prev_;
-        //   new_undo_log.prev_version_ = prev_link;
+        // if (txn_mgr->GetUndoLink(old_rid).has_value()) {
+        //   new_undo_log.prev_version_ = txn_mgr->GetUndoLink(old_rid).value();
         // }
+        std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(old_rid);
+        if (version_link.has_value()) {
+          auto prev_link = version_link->prev_;
+          new_undo_log.prev_version_ = prev_link;
+        }
         std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
         auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
         new_version_link->in_progress_ = true;

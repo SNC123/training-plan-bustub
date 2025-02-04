@@ -9,7 +9,7 @@
 // Copyright (c) 2015-2019, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-#define LOG_LEVEL LOG_LEVEL_OFF
+// #define LOG_LEVEL LOG_LEVEL_OFF
 #include "concurrency/transaction_manager.h"
 
 #include <algorithm>
@@ -86,6 +86,11 @@ auto TransactionManager::Commit(Transaction *txn) -> bool {
       auto tuple_meta = talbe_info->table_->GetTupleMeta(rid);
       tuple_meta.ts_ = txn->commit_ts_;
       talbe_info->table_->UpdateTupleMeta(tuple_meta, rid);
+      // auto version_link = GetVersionLink(rid);
+      // if(version_link.has_value()) {
+      //   UpdateVersionLink(rid, VersionUndoLink{UndoLink{version_link->prev_},false});
+      // }
+
     }
   }
   txn->state_ = TransactionState::COMMITTED;
