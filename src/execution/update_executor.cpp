@@ -12,7 +12,6 @@
 #include <cstdio>
 #include "fmt/core.h"
 #define LOG_LEVEL LOG_LEVEL_OFF
-#include "execution/executors/update_executor.h"
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -27,6 +26,7 @@
 #include "concurrency/transaction_manager.h"
 #include "container/hash/hash_function.h"
 #include "execution/execution_common.h"
+#include "execution/executors/update_executor.h"
 #include "execution/expressions/constant_value_expression.h"
 #include "storage/table/tuple.h"
 #include "type/type.h"
@@ -63,18 +63,17 @@ void UpdateExecutor::Init() {
 }
 
 auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-  // statistc and schema
+  // statistics and schema information
   int32_t updated_tuple_count = 0;
   auto schema = table_info_->schema_;
   // txn information
   auto txn = exec_ctx_->GetTransaction();
-  // auto txn_id = txn->GetTransactionId();
   auto txn_mgr = exec_ctx_->GetTransactionManager();
-  // auto tmp_ts = txn->GetTransactionTempTs();
-  // pk infomation
+  // primary key(pk) infomation
   bool is_pk_col_updated = false;
   int32_t pk_col_idx = -1;
   IndexInfo *pk_index_info{};
+
   // get pk column idx
   for (auto index_info : index_info_vector_) {
     auto idxes = index_info->index_->GetKeyAttrs();
@@ -127,59 +126,12 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       }
 
       auto meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
-      // auto read_ts = txn->GetReadTs();
       // check if tuple is being modified
-      if (meta_ts >= TXN_START_ID) {
-        if (meta_ts == txn->GetTransactionId()) {
-          // auto prev_link = txn_mgr->GetUndoLink(old_rid);
-          auto version_link = txn_mgr->GetVersionLink(old_rid);
-          if (version_link.has_value()) {
-            auto header_log = txn_mgr->GetUndoLog(version_link->prev_);
-            // get old partial schema
-            std::vector<Column> old_partial_columns;
-            auto old_column_count = schema.GetColumnCount();
-            for (uint32_t idx = 0; idx < old_column_count; idx++) {
-              if (header_log.modified_fields_[idx]) {
-                old_partial_columns.emplace_back(schema.GetColumn(idx));
-              }
-            }
-            auto old_partial_schema = Schema{old_partial_columns};
-            LOG_DEBUG("header log before %s", header_log.tuple_.ToString(&old_partial_schema).c_str());
-            // only add new column
-            std::vector<bool> modified_fields;
-            const auto column_count = schema.GetColumnCount();
-            auto old_partial_count = 0;
-            std::vector<Value> values;
-            std::vector<Column> columns;
-            for (uint32_t idx = 0; idx < column_count; ++idx) {
-              if (header_log.modified_fields_[idx]) {
-                modified_fields.emplace_back(true);
-                values.emplace_back(header_log.tuple_.GetValue(&old_partial_schema, old_partial_count));
-                columns.emplace_back(old_partial_schema.GetColumn(old_partial_count));
-                old_partial_count++;
-              } else {
-                auto old_value = old_tuple.GetValue(&schema, idx);
-                auto new_value = tuple->GetValue(&schema, idx);
-                if (!old_value.CompareExactlyEquals(new_value)) {
-                  modified_fields.emplace_back(true);
-                  values.emplace_back(old_value);
-                  columns.emplace_back(schema.GetColumn(idx));
-                } else {
-                  modified_fields.emplace_back(false);
-                }
-              }
-            }
-            auto partial_schema = Schema{columns};
-            auto partial_tuple = Tuple{values, &partial_schema};
-            header_log.modified_fields_ = modified_fields;
-            header_log.tuple_ = partial_tuple;
-            LOG_DEBUG("header log after %s", header_log.tuple_.ToString(&partial_schema).c_str());
-            auto header_log_txn = txn_mgr->txn_map_[version_link->prev_.prev_txn_];
-            header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
-          }
-          // update old tuple
-          table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, *tuple, old_rid);
-        }
+      if (meta_ts == txn->GetTransactionId()) {
+        // maintain undo link
+        ModifyHeadUndoLog(txn, txn_mgr, schema, old_rid, old_tuple, *tuple);
+        // update old tuple
+        table_info_->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, *tuple, old_rid);
       } else {
         meta_ts = table_info_->table_->GetTupleMeta(old_rid).ts_;
         if (IsWriteWriteConflict(txn, meta_ts)) {

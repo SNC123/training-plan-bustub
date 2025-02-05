@@ -11,6 +11,7 @@
 #include "common/config.h"
 #include "common/logger.h"
 #include "common/macros.h"
+#include "common/rid.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
 #include "fmt/core.h"
@@ -72,9 +73,9 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
     }
     for (size_t idx = 0; idx < log_num; ++idx) {
       auto undo_log = txn_iter.second->GetUndoLog(idx);
-      auto log_str = fmt::format("idx:{} ts:{} prev_log idx:{} prev_txn:{} is_deleted:{}\n", 
-        idx, undo_log.ts_, undo_log.prev_version_.prev_log_idx_, undo_log.prev_version_.prev_txn_,undo_log.is_deleted_
-      );
+      auto log_str =
+          fmt::format("idx:{} ts:{} prev_log idx:{} prev_txn:{} is_deleted:{}\n", idx, undo_log.ts_,
+                      undo_log.prev_version_.prev_log_idx_, undo_log.prev_version_.prev_txn_, undo_log.is_deleted_);
       result_string += log_str;
     }
   }
@@ -191,4 +192,56 @@ auto UnlockVersionLink(TransactionManager *txn_mgr, RID rid) -> bool {
 auto IsWriteWriteConflict(Transaction *txn, timestamp_t meta_ts) -> bool {
   return meta_ts != txn->GetTransactionTempTs() && meta_ts > txn->GetReadTs();
 }
+// for self modification case, update first undo log in UndoVersionLink if exists
+auto ModifyHeadUndoLog(Transaction *txn, TransactionManager *txn_mgr, const Schema &schema, RID rid,
+                       const Tuple &old_tuple, const Tuple &new_tuple) -> void {
+  auto version_link = txn_mgr->GetVersionLink(rid);
+  if (version_link.has_value()) {
+    auto header_log = txn_mgr->GetUndoLog(version_link->prev_);
+
+    // get old partial schema
+    std::vector<Column> old_partial_columns;
+    auto old_column_count = schema.GetColumnCount();
+    for (uint32_t idx = 0; idx < old_column_count; idx++) {
+      if (header_log.modified_fields_[idx]) {
+        old_partial_columns.emplace_back(schema.GetColumn(idx));
+      }
+    }
+    auto old_partial_schema = Schema{old_partial_columns};
+
+    // only add new column
+    std::vector<bool> modified_fields;
+    const auto column_count = schema.GetColumnCount();
+    auto old_partial_count = 0;
+    std::vector<Value> values;
+    std::vector<Column> columns;
+    for (uint32_t idx = 0; idx < column_count; ++idx) {
+      if (header_log.modified_fields_[idx]) {
+        modified_fields.emplace_back(true);
+        values.emplace_back(header_log.tuple_.GetValue(&old_partial_schema, old_partial_count));
+        columns.emplace_back(old_partial_schema.GetColumn(old_partial_count));
+        old_partial_count++;
+      } else {
+        auto old_value = old_tuple.GetValue(&schema, idx);
+        auto new_value = new_tuple.GetValue(&schema, idx);
+        if (!old_value.CompareExactlyEquals(new_value)) {
+          modified_fields.emplace_back(true);
+          values.emplace_back(old_value);
+          columns.emplace_back(schema.GetColumn(idx));
+        } else {
+          modified_fields.emplace_back(false);
+        }
+      }
+    }
+
+    // modify first undo log
+    auto partial_schema = Schema{columns};
+    auto partial_tuple = Tuple{values, &partial_schema};
+    header_log.modified_fields_ = modified_fields;
+    header_log.tuple_ = partial_tuple;
+    auto header_log_txn = txn_mgr->txn_map_[version_link->prev_.prev_txn_];
+    header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
+  }
+}
+
 }  // namespace bustub

@@ -21,6 +21,9 @@ auto LockVersionLink(TransactionManager *txn_mgr, RID rid) -> bool;
 auto UnlockVersionLink(TransactionManager *txn_mgr, RID rid) -> bool;
 
 auto IsWriteWriteConflict(Transaction *txn, timestamp_t meta_ts) -> bool;
+
+auto ModifyHeadUndoLog(Transaction *txn, TransactionManager *txn_mgr, const Schema &schema, RID rid,
+                       const Tuple &old_tuple, const Tuple &new_tuple) -> void;
 // Add new functions as needed... You are likely need to define some more functions.
 //
 // To give you a sense of what can be shared across executors / transaction manager, here are the
