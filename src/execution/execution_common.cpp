@@ -239,8 +239,7 @@ auto ModifyHeadUndoLog(Transaction *txn, TransactionManager *txn_mgr, const Sche
     auto partial_tuple = Tuple{values, &partial_schema};
     header_log.modified_fields_ = modified_fields;
     header_log.tuple_ = partial_tuple;
-    auto header_log_txn = txn_mgr->txn_map_[version_link->prev_.prev_txn_];
-    header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
+    txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
   }
 }
 auto CheckConflictAndLockLink(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info, RID rid,
