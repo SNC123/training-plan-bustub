@@ -243,5 +243,161 @@ auto ModifyHeadUndoLog(Transaction *txn, TransactionManager *txn_mgr, const Sche
     header_log_txn->ModifyUndoLog(version_link->prev_.prev_log_idx_, header_log);
   }
 }
+auto CheckConflictAndLockLink(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info, RID rid,
+                              std::string location_str) -> void {
+  if (IsWriteWriteConflict(txn, table_info->table_->GetTupleMeta(rid).ts_)) {
+    UnlockVersionLink(txn_mgr, rid);
+    txn->SetTainted();
+    throw ExecutionException(fmt::format("[{}] write-write conflict!", location_str));
+  }
+  bool is_locked = LockVersionLink(txn_mgr, rid);
+  if (!is_locked) {
+    txn->SetTainted();
+    throw ExecutionException(fmt::format("[{}] other threads are using version link !", location_str));
+  }
+  if (IsWriteWriteConflict(txn, table_info->table_->GetTupleMeta(rid).ts_)) {
+    UnlockVersionLink(txn_mgr, rid);
+    txn->SetTainted();
+    throw ExecutionException(fmt::format("[{}] write-write conflict!", location_str));
+  }
+}
 
+auto UpsertTuple(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info,
+                 const std::vector<IndexInfo *> &index_info_vector, Tuple &tuple) -> bool {
+  auto schema = table_info->schema_;
+  if (index_info_vector.size() <= 1) {
+    // used for upsert tuple(true->insert, false->update)
+    bool is_insert_new_tuple = true;
+    // tuple in pk_rid needs updated
+    RID pk_rid{};
+    for (auto index_info : index_info_vector) {
+      // determine whether new tuple has an index
+      std::vector<RID> found_rids{};
+      auto target_key = tuple.KeyFromTuple(schema, index_info->key_schema_, index_info->index_->GetKeyAttrs());
+      index_info->index_->ScanKey(target_key, &found_rids, nullptr);
+
+      if (!found_rids.empty()) {
+        // only consider the case of primary key
+        if (index_info->is_primary_key_) {
+          pk_rid = found_rids[0];
+          // if there is undeleted tuple in table heap, do abort.
+          if (!table_info->table_->GetTupleMeta(pk_rid).is_deleted_) {
+            txn->SetTainted();
+            throw ExecutionException("[InsertExecutor] mapped tuple has existed!");
+          }
+          is_insert_new_tuple = false;
+        } else {
+          // TODO(low priority): Compatibility with Project 3
+        }
+      }
+    }
+    if (is_insert_new_tuple) {
+      auto opt_rid = table_info->table_->InsertTuple({txn->GetTransactionTempTs(), false}, tuple);
+      if (!opt_rid.has_value()) {
+        return false;
+      }
+      auto new_rid = opt_rid.value();
+
+      // if index does not exist, insert new index
+      for (auto index_info : index_info_vector) {
+        auto target_key = tuple.KeyFromTuple(schema, index_info->key_schema_, index_info->index_->GetKeyAttrs());
+        // bool is_index_inserted = index_info->index_->InsertEntry(target_key, *rid, nullptr);
+        if (!index_info->index_->InsertEntry(target_key, new_rid, nullptr)) {
+          // detect multiple index map to same tuple
+          txn->SetTainted();
+          throw ExecutionException("[InsertExecutor] multiple indexes map to same tuple!");
+        }
+      }
+
+      txn->AppendWriteSet(table_info->oid_, new_rid);
+      txn_mgr->UpdateVersionLink(new_rid, std::nullopt);
+    } else {
+      // if deleted by current txn, there is no log updating because of previous deletion
+      auto old_meta_ts = table_info->table_->GetTupleMeta(pk_rid).ts_;
+      if (old_meta_ts == txn->GetTransactionId()) {
+        // insert new tuple in old rid
+        table_info->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, tuple, pk_rid);
+        txn->AppendWriteSet(table_info->oid_, pk_rid);
+      } else {
+        CheckConflictAndLockLink(txn, txn_mgr, table_info, pk_rid, "InsertExecutor");
+
+        // build undo log(empty modified fields because of previous deletion)
+        auto column_count = schema.GetColumnCount();
+        std::vector<bool> modified_fields(column_count);
+        std::vector<Value> values(column_count);
+        for (size_t idx = 0; idx < column_count; ++idx) {
+          modified_fields[idx] = false;
+        }
+        old_meta_ts = table_info->table_->GetTupleMeta(pk_rid).ts_;
+        auto new_undo_log = UndoLog{true, modified_fields, Tuple{}, old_meta_ts, UndoLink{}};
+        std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(pk_rid);
+        if (version_link.has_value()) {
+          auto prev_link = version_link->prev_;
+          new_undo_log.prev_version_ = prev_link;
+        }
+
+        // build and update version link
+        std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
+        auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+        new_version_link->in_progress_ = true;
+        table_info->table_->UpdateTupleInPlace({txn->GetTransactionTempTs(), false}, tuple, pk_rid);
+        txn->AppendWriteSet(table_info->oid_, pk_rid);
+        txn_mgr->UpdateVersionLink(pk_rid, new_version_link);
+
+        UnlockVersionLink(txn_mgr, pk_rid);
+      }
+    }
+
+  } else {
+    // TODO(low priority): Compatibility with Project 3
+  }
+
+  return true;
+}
+
+auto DeleteTuple(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info, RID rid, Tuple &tuple)
+    -> void {
+  // if tuple is not in table heap, it must be write-write conflict (think carefully!!!)
+  if (tuple.GetRid().GetPageId() == INVALID_PAGE_ID) {
+    txn->SetTainted();
+    throw ExecutionException("[DeleteExecutor] Detect write-write conflict !");
+  }
+
+  auto meta_ts = table_info->table_->GetTupleMeta(rid).ts_;
+  // check if tuple is being modified
+  if (meta_ts == txn->GetTransactionId()) {
+    // maintain undo link
+    ModifyHeadUndoLog(txn, txn_mgr, table_info->schema_, rid, tuple, tuple);
+    // delete old tuple(just set is_deleted to true)
+    table_info->table_->UpdateTupleMeta({txn->GetTransactionTempTs(), true}, rid);
+    txn->AppendWriteSet(table_info->oid_, rid);
+  } else {
+    CheckConflictAndLockLink(txn, txn_mgr, table_info, rid, "DeleteExecutor");
+
+    // build undo log(full modified fields)
+    std::vector<bool> modified_fields;
+    auto column_count = table_info->schema_.GetColumnCount();
+    for (uint32_t i = 0; i < column_count; ++i) {
+      modified_fields.emplace_back(true);
+    }
+    meta_ts = table_info->table_->GetTupleMeta(rid).ts_;
+    Tuple re_tuple = table_info->table_->GetTuple(rid).second;
+    auto new_undo_log = UndoLog{false, modified_fields, re_tuple, meta_ts, UndoLink{}};
+
+    // build and update version link
+    std::optional<VersionUndoLink> version_link = txn_mgr->GetVersionLink(rid);
+    if (version_link.has_value()) {
+      auto prev_link = version_link->prev_;
+      new_undo_log.prev_version_ = prev_link;
+    }
+    std::optional<UndoLink> new_undo_link = txn->AppendUndoLog(new_undo_log);
+    auto new_version_link = VersionUndoLink::FromOptionalUndoLink(new_undo_link);
+    new_version_link->in_progress_ = true;
+    txn_mgr->UpdateVersionLink(rid, new_version_link);
+    table_info->table_->UpdateTupleMeta({txn->GetTransactionTempTs(), true}, rid);
+    txn->AppendWriteSet(table_info->oid_, rid);
+
+    UnlockVersionLink(txn_mgr, rid);
+  }
+}
 }  // namespace bustub

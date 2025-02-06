@@ -6,6 +6,7 @@
 #include "catalog/catalog.h"
 #include "catalog/schema.h"
 #include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 #include "storage/table/tuple.h"
 
 namespace bustub {
@@ -24,6 +25,15 @@ auto IsWriteWriteConflict(Transaction *txn, timestamp_t meta_ts) -> bool;
 
 auto ModifyHeadUndoLog(Transaction *txn, TransactionManager *txn_mgr, const Schema &schema, RID rid,
                        const Tuple &old_tuple, const Tuple &new_tuple) -> void;
+
+auto CheckConflictAndLockLink(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info, RID rid,
+                              std::string location_str) -> void;
+
+auto UpsertTuple(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info,
+                 const std::vector<IndexInfo *> &index_info_vector, Tuple &tuple) -> bool;
+
+auto DeleteTuple(Transaction *txn, TransactionManager *txn_mgr, const TableInfo *table_info, RID rid, Tuple &tuple)
+    -> void;
 // Add new functions as needed... You are likely need to define some more functions.
 //
 // To give you a sense of what can be shared across executors / transaction manager, here are the
