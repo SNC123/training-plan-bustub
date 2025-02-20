@@ -12,6 +12,7 @@
 
 #include "storage/disk/disk_scheduler.h"
 #include "common/exception.h"
+#include "common/logger.h"
 #include "storage/disk/disk_manager.h"
 
 namespace bustub {
@@ -39,15 +40,12 @@ void DiskScheduler::StartWorkerThread() {
 
     // singal to stop this thread
     if (req == std::nullopt) {
-      // std::cout << "stop work thread" << std::endl;
       break;
     }
     if (req->is_write_) {
-      // std::cout << "get request write" << std::endl;
       disk_manager_->WritePage(req->page_id_, req->data_);
       req->callback_.set_value(true);
     } else {
-      // std::cout << "get request read" << std::endl;
       disk_manager_->ReadPage(req->page_id_, req->data_);
       req->callback_.set_value(true);
     }

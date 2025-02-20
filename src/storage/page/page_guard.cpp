@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/page_guard.h"
+#include <mutex>
 #include "common/config.h"
 
 namespace bustub {
@@ -30,7 +31,12 @@ namespace bustub {
 ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                              std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(std::move(frame)), replacer_(std::move(replacer)), bpm_latch_(std::move(bpm_latch)) {
-  
+  if (!frame_->is_io_done_) {
+    std::unique_lock<std::mutex> lock(frame_->io_latch_);
+    frame_->cv_.wait(lock, [&]() { return frame_->is_io_done_; });
+  }
+  frame_->rwlatch_.lock_shared();
+  is_valid_ = true;
 }
 
 /**
@@ -49,9 +55,12 @@ ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> fra
  * @param that The other page guard.
  */
 ReadPageGuard::ReadPageGuard(ReadPageGuard &&that) noexcept
-  :page_id_(that.page_id_),frame_(std::move(that.frame_)),replacer_(std::move(that.replacer_)),
-    bpm_latch_(std::move(that.bpm_latch_)),is_valid_(that.is_valid_) {
-    that.Clear();
+    : page_id_(that.page_id_),
+      frame_(std::move(that.frame_)),
+      replacer_(std::move(that.replacer_)),
+      bpm_latch_(std::move(that.bpm_latch_)),
+      is_valid_(that.is_valid_) {
+  that.Clear();
 }
 
 /**
@@ -72,16 +81,16 @@ ReadPageGuard::ReadPageGuard(ReadPageGuard &&that) noexcept
  * @return ReadPageGuard& The newly valid `ReadPageGuard`.
  */
 auto ReadPageGuard::operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard & {
-  if(this!= &that) {
+  if (this != &that) {
     Drop();
     page_id_ = that.page_id_;
-    frame_ = that.frame_;
-    replacer_ = that.replacer_;
+    frame_ = std::move(that.frame_);
+    replacer_ = std::move(that.replacer_);
     is_valid_ = that.is_valid_;
-    bpm_latch_ = that.bpm_latch_;
+    bpm_latch_ = std::move(that.bpm_latch_);
     that.Clear();
   }
-  return *this; 
+  return *this;
 }
 
 /**
@@ -119,11 +128,21 @@ auto ReadPageGuard::IsDirty() const -> bool {
  *
  * TODO(P1): Add implementation.
  */
-void ReadPageGuard::Drop() { 
-  if( frame_ == nullptr || replacer_ == nullptr || bpm_latch_ == nullptr) {
-    return ;
+void ReadPageGuard::Drop() {
+  if (!is_valid_) {
+    return;
   }
-  // is there something to do?
+
+  is_valid_ = false;
+  page_id_ = INVALID_PAGE_ID;
+  frame_->rwlatch_.unlock_shared();
+
+  bpm_latch_->lock();
+  frame_->pin_count_--;
+  if (frame_->pin_count_.load() == 0) {
+    replacer_->SetEvictable(frame_->frame_id_, true);
+  }
+  bpm_latch_->unlock();
   Clear();
 }
 
@@ -157,7 +176,12 @@ void ReadPageGuard::Clear() {
 WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                                std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(std::move(frame)), replacer_(std::move(replacer)), bpm_latch_(std::move(bpm_latch)) {
-  UNIMPLEMENTED("TODO(P1): Add implementation.");
+  if (!frame_->is_io_done_) {
+    std::unique_lock<std::mutex> lock(frame_->io_latch_);
+    frame_->cv_.wait(lock, [&]() { return frame_->is_io_done_; });
+  }
+  frame_->rwlatch_.lock();
+  is_valid_ = true;
 }
 
 /**
@@ -175,7 +199,14 @@ WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> f
  *
  * @param that The other page guard.
  */
-WritePageGuard::WritePageGuard(WritePageGuard &&that) noexcept {}
+WritePageGuard::WritePageGuard(WritePageGuard &&that) noexcept
+    : page_id_(that.page_id_),
+      frame_(std::move(that.frame_)),
+      replacer_(std::move(that.replacer_)),
+      bpm_latch_(std::move(that.bpm_latch_)),
+      is_valid_(that.is_valid_) {
+  that.Clear();
+}
 
 /**
  * @brief The move assignment operator for `WritePageGuard`.
@@ -194,8 +225,18 @@ WritePageGuard::WritePageGuard(WritePageGuard &&that) noexcept {}
  * @param that The other page guard.
  * @return WritePageGuard& The newly valid `WritePageGuard`.
  */
-auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard & { return *this; }
-
+auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard & {
+  if (this != &that) {
+    Drop();
+    page_id_ = that.page_id_;
+    frame_ = std::move(that.frame_);
+    replacer_ = std::move(that.replacer_);
+    is_valid_ = that.is_valid_;
+    bpm_latch_ = std::move(that.bpm_latch_);
+    that.Clear();
+  }
+  return *this;
+}
 /**
  * @brief Gets the page ID of the page this guard is protecting.
  */
@@ -217,6 +258,7 @@ auto WritePageGuard::GetData() const -> const char * {
  */
 auto WritePageGuard::GetDataMut() -> char * {
   BUSTUB_ENSURE(is_valid_, "tried to use an invalid write guard");
+  frame_->is_dirty_ = true;
   return frame_->GetDataMut();
 }
 
@@ -239,9 +281,32 @@ auto WritePageGuard::IsDirty() const -> bool {
  *
  * TODO(P1): Add implementation.
  */
-void WritePageGuard::Drop() { UNIMPLEMENTED("TODO(P1): Add implementation."); }
+void WritePageGuard::Drop() {
+  if (!is_valid_) {
+    return;
+  }
+
+  is_valid_ = false;
+  page_id_ = INVALID_PAGE_ID;
+  frame_->rwlatch_.unlock();
+
+  bpm_latch_->lock();
+  frame_->pin_count_--;
+  if (frame_->pin_count_.load() == 0) {
+    replacer_->SetEvictable(frame_->frame_id_, true);
+  }
+  bpm_latch_->unlock();
+  Clear();
+}
 
 /** @brief The destructor for `WritePageGuard`. This destructor simply calls `Drop()`. */
 WritePageGuard::~WritePageGuard() { Drop(); }
 
+void WritePageGuard::Clear() {
+  page_id_ = INVALID_PAGE_ID;
+  frame_ = nullptr;
+  replacer_ = nullptr;
+  bpm_latch_ = nullptr;
+  is_valid_ = false;
+}
 }  // namespace bustub

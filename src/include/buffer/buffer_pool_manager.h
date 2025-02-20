@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <list>
 #include <memory>
 #include <shared_mutex>
@@ -95,6 +96,10 @@ class FrameHeader {
    * currently storing. This might allow you to skip searching for the corresponding (page ID, frame ID) pair somewhere
    * else in the buffer pool manager...
    */
+  page_id_t page_id_;
+  bool is_io_done_{false};
+  std::condition_variable cv_;
+  std::mutex io_latch_;
 };
 
 /**
@@ -170,5 +175,29 @@ class BufferPoolManager {
    * stored inside of it. Additionally, you may also want to implement a helper function that returns either a shared
    * pointer to a `FrameHeader` that already has a page's data stored inside of it, or an index to said `FrameHeader`.
    */
+
+  auto GetFrameHeaderOrLoad(page_id_t page_id) -> std::shared_ptr<FrameHeader>;
+
+  auto GetFreeFrameId() -> frame_id_t {
+    if (free_frames_.empty()) {
+      return INVALID_FRAME_ID;
+    }
+    auto frame_id = free_frames_.front();
+    free_frames_.pop_front();
+    return frame_id;
+  }
+
+  auto GetAvaliableFrameId() -> frame_id_t {
+    auto free_frame_id = GetFreeFrameId();
+    if (free_frame_id != INVALID_FRAME_ID) {
+      return free_frame_id;
+    }
+
+    auto opt_frame_id = replacer_->Evict();
+    if (!opt_frame_id.has_value()) {
+      return INVALID_FRAME_ID;
+    }
+    return opt_frame_id.value();
+  }
 };
 }  // namespace bustub

@@ -64,6 +64,7 @@ class ReadPageGuard {
   ~ReadPageGuard();
   // added
   void Clear();
+
  private:
   /** @brief Only the buffer pool manager is allowed to construct a valid `ReadPageGuard.` */
   explicit ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame, std::shared_ptr<LRUKReplacer> replacer,
@@ -162,6 +163,8 @@ class WritePageGuard {
   auto IsDirty() const -> bool;
   void Drop();
   ~WritePageGuard();
+  // added
+  void Clear();
 
  private:
   /** @brief Only the buffer pool manager is allowed to construct a valid `WritePageGuard.` */
