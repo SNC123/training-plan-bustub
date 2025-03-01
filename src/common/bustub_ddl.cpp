@@ -42,7 +42,7 @@
 
 namespace bustub {
 
-void BustubInstance::HandleCreateStatement(Transaction *txn, const CreateStatement &stmt, ResultWriter &writer) {
+void BusTubInstance::HandleCreateStatement(Transaction *txn, const CreateStatement &stmt, ResultWriter &writer) {
   std::unique_lock<std::shared_mutex> l(catalog_lock_);
   auto info = catalog_->CreateTable(txn, stmt.table_, Schema(stmt.columns_));
   IndexInfo *index = nullptr;
@@ -85,7 +85,7 @@ void BustubInstance::HandleCreateStatement(Transaction *txn, const CreateStateme
   }
 }
 
-void BustubInstance::HandleIndexStatement(Transaction *txn, const IndexStatement &stmt, ResultWriter &writer) {
+void BusTubInstance::HandleIndexStatement(Transaction *txn, const IndexStatement &stmt, ResultWriter &writer) {
   std::vector<uint32_t> col_ids;
   for (const auto &col : stmt.cols_) {
     auto idx = stmt.table_->schema_.GetColIdx(col->col_name_.back());
@@ -106,18 +106,40 @@ void BustubInstance::HandleIndexStatement(Transaction *txn, const IndexStatement
   }
 
   std::unique_lock<std::shared_mutex> l(catalog_lock_);
-  auto info = catalog_->CreateIndex<IntegerKeyType, IntegerValueType, IntegerComparatorType>(
-      txn, stmt.index_name_, stmt.table_->table_, stmt.table_->schema_, key_schema, col_ids, TWO_INTEGER_SIZE,
-      IntegerHashFunctionType{}, false, IndexType::HashTableIndex);
+  IndexInfo *info = nullptr;
+
+  if (stmt.index_type_.empty()) {
+    info = catalog_->CreateIndex<IntegerKeyType, IntegerValueType, IntegerComparatorType>(
+        txn, stmt.index_name_, stmt.table_->table_, stmt.table_->schema_, key_schema, col_ids, TWO_INTEGER_SIZE,
+        IntegerHashFunctionType{}, false);  // create default index
+  } else if (stmt.index_type_ == "hash") {
+    info = catalog_->CreateIndex<IntegerKeyType, IntegerValueType, IntegerComparatorType>(
+        txn, stmt.index_name_, stmt.table_->table_, stmt.table_->schema_, key_schema, col_ids, TWO_INTEGER_SIZE,
+        IntegerHashFunctionType{}, false, IndexType::HashTableIndex);
+  } else if (stmt.index_type_ == "bplustree") {
+    info = catalog_->CreateIndex<IntegerKeyType, IntegerValueType, IntegerComparatorType>(
+        txn, stmt.index_name_, stmt.table_->table_, stmt.table_->schema_, key_schema, col_ids, TWO_INTEGER_SIZE,
+        IntegerHashFunctionType{}, false, IndexType::BPlusTreeIndex);
+  } else if (stmt.index_type_ == "stl_ordered") {
+    info = catalog_->CreateIndex<IntegerKeyType, IntegerValueType, IntegerComparatorType>(
+        txn, stmt.index_name_, stmt.table_->table_, stmt.table_->schema_, key_schema, col_ids, TWO_INTEGER_SIZE,
+        IntegerHashFunctionType{}, false, IndexType::STLOrderedIndex);
+  } else if (stmt.index_type_ == "stl_unordered") {
+    info = catalog_->CreateIndex<IntegerKeyType, IntegerValueType, IntegerComparatorType>(
+        txn, stmt.index_name_, stmt.table_->table_, stmt.table_->schema_, key_schema, col_ids, TWO_INTEGER_SIZE,
+        IntegerHashFunctionType{}, false, IndexType::STLUnorderedIndex);
+  } else {
+    UNIMPLEMENTED("unsupported index type " + stmt.index_type_);
+  }
   l.unlock();
 
   if (info == nullptr) {
     throw bustub::Exception("Failed to create index");
   }
-  WriteOneCell(fmt::format("Index created with id = {}", info->index_oid_), writer);
+  WriteOneCell(fmt::format("Index created with id = {} with type = {}", info->index_oid_, info->index_type_), writer);
 }
 
-void BustubInstance::HandleExplainStatement(Transaction *txn, const ExplainStatement &stmt, ResultWriter &writer) {
+void BusTubInstance::HandleExplainStatement(Transaction *txn, const ExplainStatement &stmt, ResultWriter &writer) {
   std::string output;
 
   // Print binder result.
@@ -159,18 +181,18 @@ void BustubInstance::HandleExplainStatement(Transaction *txn, const ExplainState
   WriteOneCell(output, writer);
 }
 
-void BustubInstance::HandleVariableShowStatement(Transaction *txn, const VariableShowStatement &stmt,
+void BusTubInstance::HandleVariableShowStatement(Transaction *txn, const VariableShowStatement &stmt,
                                                  ResultWriter &writer) {
   auto content = GetSessionVariable(stmt.variable_);
   WriteOneCell(fmt::format("{}={}", stmt.variable_, content), writer);
 }
 
-void BustubInstance::HandleVariableSetStatement(Transaction *txn, const VariableSetStatement &stmt,
+void BusTubInstance::HandleVariableSetStatement(Transaction *txn, const VariableSetStatement &stmt,
                                                 ResultWriter &writer) {
   session_variables_[stmt.variable_] = stmt.value_;
 }
 
-void BustubInstance::HandleTxnStatement(Transaction *txn, const TransactionStatement &stmt, ResultWriter &writer) {
+void BusTubInstance::HandleTxnStatement(Transaction *txn, const TransactionStatement &stmt, ResultWriter &writer) {
   if (managed_txn_mode_ && current_txn_ != nullptr) {
     BUSTUB_ASSERT(current_txn_ == txn, "txn mismatched??");
   }

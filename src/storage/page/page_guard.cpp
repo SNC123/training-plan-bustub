@@ -68,10 +68,12 @@ auto BasicPageGuard::UpgradeWrite() -> WritePageGuard {
   return write_guard;
 }
 
+
 ReadPageGuard::ReadPageGuard(ReadPageGuard &&that) noexcept {
   // DEBUG("into ReadPageGuard move constructor")
   guard_ = std::move(that.guard_);
 }
+
 
 auto ReadPageGuard::operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard & {
   // DEBUG("into ReadPageGuard move assignment")
@@ -96,7 +98,9 @@ ReadPageGuard::~ReadPageGuard() {
   // std::cout<<"remove ReadPageGuard"<<std::endl;
 }  // NOLINT
 
+
 WritePageGuard::WritePageGuard(WritePageGuard &&that) noexcept { guard_ = std::move(that.guard_); };
+
 
 auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard & {
   if (this != &that) {

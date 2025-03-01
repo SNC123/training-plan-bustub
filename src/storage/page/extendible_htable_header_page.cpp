@@ -33,9 +33,11 @@ auto ExtendibleHTableHeaderPage::HashToDirectoryIndex(uint32_t hash) const -> ui
   return hash >> offset;
 }
 
+
 auto ExtendibleHTableHeaderPage::GetDirectoryPageId(uint32_t directory_idx) const -> uint32_t {
   return directory_page_ids_[directory_idx];
 }
+
 
 void ExtendibleHTableHeaderPage::SetDirectoryPageId(uint32_t directory_idx, page_id_t directory_page_id) {
   directory_page_ids_[directory_idx] = directory_page_id;

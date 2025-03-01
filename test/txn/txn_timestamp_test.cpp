@@ -49,8 +49,10 @@ TEST(TxnTsTest, DISABLED_WatermarkPerformance) {  // NOLINT
   }
 }
 
+
 TEST(TxnTsTest, TimestampTracking) {  // NOLINT
   auto bustub = std::make_unique<BustubInstance>();
+
 
   auto txn0 = bustub->txn_manager_->Begin();
   ASSERT_EQ(txn0->GetReadTs(), 0);

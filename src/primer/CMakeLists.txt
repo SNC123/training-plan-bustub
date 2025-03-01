@@ -1,6 +1,10 @@
 add_library(
   bustub_primer
   OBJECT
+  hyperloglog.cpp
+  hyperloglog_presto.cpp
+  orset.cpp
+  orset_driver.cpp
   trie.cpp
   trie_store.cpp)
 

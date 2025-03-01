@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "recovery/log_manager.h"
 #include "storage/disk/disk_scheduler.h"
+#include "storage/disk/write_back_cache.h"
 #include "storage/page/page.h"
 #include "storage/page/page_guard.h"
 
@@ -73,7 +74,7 @@ class BufferPoolManager {
   auto NewPage(page_id_t *page_id) -> Page *;
 
   /**
-   * TODO(P2): Add implementation
+   * TODO(P1): Add implementation
    *
    * @brief PageGuard wrapper for NewPage
    *
@@ -106,7 +107,7 @@ class BufferPoolManager {
   auto FetchPage(page_id_t page_id, AccessType access_type = AccessType::Unknown) -> Page *;
 
   /**
-   * TODO(P2): Add implementation
+   * TODO(P1): Add implementation
    *
    * @brief PageGuard wrappers for FetchPage
    *
@@ -181,7 +182,7 @@ class BufferPoolManager {
 
   /** Array of buffer pool pages. */
   Page *pages_;
-  /** Pointer to the disk sheduler. */
+  /** Pointer to the disk scheduler. */
   std::unique_ptr<DiskScheduler> disk_scheduler_ __attribute__((__unused__));
   /** Pointer to the log manager. Please ignore this for P1. */
   LogManager *log_manager_ __attribute__((__unused__));
@@ -193,6 +194,8 @@ class BufferPoolManager {
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;
+  /** This buffer is for the leaderboard task. You may want to use it to optimize the write requests. */
+  WriteBackCache write_back_cache_ __attribute__((__unused__));
 
   // we use latches in the order of "free_list_latch_ > page_table_latch > pages_latches_"
   std::mutex next_page_id_latch_;

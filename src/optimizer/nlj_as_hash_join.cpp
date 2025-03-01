@@ -49,7 +49,7 @@ void ComparisonExpressionSpilt(const ComparisonExpression *expr,
 
 auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   // TODO(student): implement NestedLoopJoin -> HashJoin optimizer rule
-  // Note for 2023 Fall: You should support join keys of any number of conjunction of equi-condistions:
+  // Note for 2023 Fall: You should support join keys of any number of conjunction of equi-conditions:
   // E.g. <column expr> = <column expr> AND <column expr> = <column expr> AND ...
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {

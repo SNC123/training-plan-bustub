@@ -22,6 +22,7 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_fra
   node_store_ = new LRUKNode[num_frames];
 }
 
+
 LRUKReplacer::~LRUKReplacer() { delete[] node_store_; }
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {

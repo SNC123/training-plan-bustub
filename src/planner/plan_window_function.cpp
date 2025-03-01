@@ -82,7 +82,7 @@ auto Planner::PlanSelectWindow(const SelectStatement &statement, AbstractPlanNod
     // parse window function
     window_func_indexes.push_back(i);
     // we assign a -1 here as a placeholder
-    columns.emplace_back(std::make_shared<ColumnValueExpression>(0, -1, TypeId::INTEGER));
+    columns.emplace_back(std::make_shared<ColumnValueExpression>(0, -1, Column{"<placeholder>", TypeId::INTEGER}));
 
     const BoundExpression *window_item = nullptr;
     if (item->type_ == ExpressionType::ALIAS) {
@@ -98,7 +98,7 @@ auto Planner::PlanSelectWindow(const SelectStatement &statement, AbstractPlanNod
     if (window_call.start_ != WindowBoundary::UNBOUNDED_PRECEDING ||
         (window_call.end_ != WindowBoundary::CURRENT_ROW_ROWS &&
          window_call.end_ != WindowBoundary::CURRENT_ROW_RANGE)) {
-      throw Exception("Bustub currently only support window function with default window frame settings");
+      throw Exception("BusTub currently only support window function with default window frame settings");
     }
     std::vector<AbstractExpressionRef> partition_by;
     for (auto &item : window_call.partition_by_) {
