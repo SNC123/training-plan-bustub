@@ -23,7 +23,7 @@
 namespace bustub {
 
 // NOLINTNEXTLINE
-TEST(PageGuardTest, DISABLED_SampleTest) {
+TEST(PageGuardTest, SampleTest) {
   const size_t buffer_pool_size = 5;
   const size_t k = 2;
 
@@ -34,6 +34,7 @@ TEST(PageGuardTest, DISABLED_SampleTest) {
   auto *page0 = bpm->NewPage(&page_id_temp);
 
   auto guarded_page = BasicPageGuard(bpm.get(), page0);
+  // BasicPageGuard moved_guard = std::move(guarded_page);
 
   EXPECT_EQ(page0->GetData(), guarded_page.GetData());
   EXPECT_EQ(page0->GetPageId(), guarded_page.PageId());
@@ -45,11 +46,16 @@ TEST(PageGuardTest, DISABLED_SampleTest) {
 
   {
     auto *page2 = bpm->NewPage(&page_id_temp);
+
+    // page2->RLatch();
+
     auto guard2 = ReadPageGuard(bpm.get(), page2);
   }
 
   // Shutdown the disk manager and remove the temporary file we created.
+  std::cout << "before shutdown" << std::endl;
   disk_manager->ShutDown();
+  std::cout << "after shutdown" << std::endl;
 }
 
 }  // namespace bustub

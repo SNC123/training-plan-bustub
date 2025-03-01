@@ -1,5 +1,7 @@
+#define LOG_LEVEL LOG_LEVEL_OFF
 #include "execution/executors/filter_executor.h"
 #include "common/exception.h"
+#include "common/logger.h"
 #include "type/value_factory.h"
 
 namespace bustub {
@@ -23,7 +25,7 @@ auto FilterExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     if (!status) {
       return false;
     }
-
+    LOG_DEBUG("child schema: %s", child_executor_->GetOutputSchema().ToString().c_str());
     auto value = filter_expr->Evaluate(tuple, child_executor_->GetOutputSchema());
     if (!value.IsNull() && value.GetAs<bool>()) {
       return true;

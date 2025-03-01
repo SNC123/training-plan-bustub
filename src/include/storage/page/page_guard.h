@@ -83,9 +83,22 @@ class BasicPageGuard {
    */
   auto UpgradeWrite() -> WritePageGuard;
 
-  auto PageId() -> page_id_t { return page_->GetPageId(); }
+  // set contents to default
+  auto Clear() -> void;
 
-  auto GetData() -> const char * { return page_->GetData(); }
+  auto PageId() -> page_id_t {
+    if (page_ != nullptr) {
+      return page_->GetPageId();
+    }
+    return -1;
+  }
+
+  auto GetData() -> const char * {
+    if (page_ != nullptr) {
+      return page_->GetData();
+    }
+    return nullptr;
+  }
 
   template <class T>
   auto As() -> const T * {

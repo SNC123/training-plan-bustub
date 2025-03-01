@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+// #define NDEBUG
+
 #include "common/logger.h"
 #include "common/macros.h"
 #include "storage/page/extendible_htable_bucket_page.h"

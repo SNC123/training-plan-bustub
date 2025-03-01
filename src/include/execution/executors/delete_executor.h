@@ -20,8 +20,12 @@
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/delete_plan.h"
 #include "storage/table/tuple.h"
+#include "type/value_factory.h"
 
 namespace bustub {
+
+// added
+using IndexInfos = std::vector<IndexInfo *>;
 
 /**
  * DeletedExecutor executes a delete on a table.
@@ -61,5 +65,9 @@ class DeleteExecutor : public AbstractExecutor {
 
   /** The child executor from which RIDs for deleted tuples are pulled */
   std::unique_ptr<AbstractExecutor> child_executor_;
+  // added
+  IndexInfos index_info_vector_;
+  bool is_deleted_{false};
+  const TableInfo *table_info_;
 };
 }  // namespace bustub

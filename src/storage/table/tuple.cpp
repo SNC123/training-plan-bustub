@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "common/logger.h"
 #include "storage/table/tuple.h"
 
 namespace bustub {
@@ -73,6 +74,7 @@ auto Tuple::KeyFromTuple(const Schema &schema, const Schema &key_schema, const s
   std::vector<Value> values;
   values.reserve(key_attrs.size());
   for (auto idx : key_attrs) {
+    // LOG_DEBUG("value: %s", this->GetValue(&schema, idx).ToString().c_str());
     values.emplace_back(this->GetValue(&schema, idx));
   }
   return {values, &key_schema};

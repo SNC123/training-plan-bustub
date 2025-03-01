@@ -8,6 +8,7 @@
 #include <thread>  // NOLINT
 
 #include "common/bustub_instance.h"
+#include "common/logger.h"
 #include "concurrency/transaction.h"
 #include "concurrency/transaction_manager.h"
 #include "concurrency/watermark.h"
@@ -48,8 +49,10 @@ TEST(TxnTsTest, DISABLED_WatermarkPerformance) {  // NOLINT
   }
 }
 
-TEST(TxnTsTest, DISABLED_TimestampTracking) {  // NOLINT
-  auto bustub = std::make_unique<BusTubInstance>();
+
+TEST(TxnTsTest, TimestampTracking) {  // NOLINT
+  auto bustub = std::make_unique<BustubInstance>();
+
 
   auto txn0 = bustub->txn_manager_->Begin();
   ASSERT_EQ(txn0->GetReadTs(), 0);
@@ -59,6 +62,9 @@ TEST(TxnTsTest, DISABLED_TimestampTracking) {  // NOLINT
     auto txn_store_1 = bustub->txn_manager_->Begin();
     ASSERT_EQ(txn_store_1->GetReadTs(), 0);
     bustub->txn_manager_->Commit(txn_store_1);
+    if (txn_store_1 == nullptr) {
+      LOG_DEBUG("NULL");
+    }
     ASSERT_EQ(txn_store_1->GetCommitTs(), 1);
   }
 

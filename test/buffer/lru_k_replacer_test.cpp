@@ -16,13 +16,9 @@
 
 namespace bustub {
 
-TEST(LRUKReplacerTest, DISABLED_SampleTest) {
-  // Note that comparison with `std::nullopt` always results in `false`, and if the optional type actually does contain
-  // a value, the comparison will compare the inner value.
-  // See: https://devblogs.microsoft.com/oldnewthing/20211004-00/?p=105754
-  std::optional<frame_id_t> frame;
 
-  // Initialize the replacer.
+TEST(LRUKReplacerTest, SampleTest) {
+
   LRUKReplacer lru_replacer(7, 2);
 
   // Add six frames to the replacer. We now have frames [1, 2, 3, 4, 5]. We set frame 6 as non-evictable.
@@ -117,6 +113,33 @@ TEST(LRUKReplacerTest, DISABLED_SampleTest) {
   // Make sure that setting a non-existent frame as evictable or non-evictable doesn't do something strange.
   lru_replacer.SetEvictable(6, false);
   lru_replacer.SetEvictable(6, true);
+}
+
+
+TEST(LRUKReplacerTest, DIY_Evict_Test) {
+  // define:
+  // [frame id]+ means evictalbe
+  // [frame id]- means otherwise
+  LRUKReplacer lru_replacer(4, 3);
+
+  lru_replacer.RecordAccess(1);
+  lru_replacer.RecordAccess(2);
+  lru_replacer.RecordAccess(3);
+  lru_replacer.RecordAccess(4);
+  lru_replacer.RecordAccess(1);
+  lru_replacer.RecordAccess(2);
+  lru_replacer.RecordAccess(3);
+  lru_replacer.RecordAccess(1);
+  lru_replacer.RecordAccess(2);
+
+  lru_replacer.SetEvictable(1, true);
+  lru_replacer.SetEvictable(2, true);
+  lru_replacer.SetEvictable(3, true);
+  lru_replacer.SetEvictable(4, true);
+
+  int value;
+  lru_replacer.Evict(&value);
+  ASSERT_EQ(3, value);
 }
 
 }  // namespace bustub

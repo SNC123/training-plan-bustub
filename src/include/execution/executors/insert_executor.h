@@ -14,13 +14,18 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
+#include "catalog/catalog.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/insert_plan.h"
 #include "storage/table/tuple.h"
 
 namespace bustub {
+
+// added
+using IndexInfos = std::vector<IndexInfo *>;
 
 /**
  * InsertExecutor executes an insert on a table.
@@ -57,6 +62,11 @@ class InsertExecutor : public AbstractExecutor {
  private:
   /** The insert plan node to be executed*/
   const InsertPlanNode *plan_;
+  // added
+  std::unique_ptr<AbstractExecutor> child_executor_;
+  IndexInfos index_info_vector_;
+  const TableInfo *table_info_;
+  bool is_inserted_{false};
 };
 
 }  // namespace bustub

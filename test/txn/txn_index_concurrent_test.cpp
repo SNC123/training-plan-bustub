@@ -117,7 +117,7 @@ TEST(TxnIndexTest, DISABLED_IndexConcurrentUpdateTest) {  // NOLINT
     }
     return fmt::format("INSERT INTO maintable VALUES {}", fmt::join(data, ","));
   };
-  const int trials = 50;
+  const int trials = 500;
   for (int n = 0; n < trials; n++) {
     auto bustub = std::make_unique<BusTubInstance>();
     EnsureIndexScan(*bustub);

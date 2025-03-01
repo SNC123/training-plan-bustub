@@ -99,7 +99,10 @@ TEST(BufferPoolManagerTest, DISABLED_BinaryDataTest) {
 }
 
 // NOLINTNEXTLINE
-TEST(BufferPoolManagerTest, DISABLED_SampleTest) {
+
+TEST(BufferPoolManagerTest, SampleTest) {
+  const std::string db_name = "test.db";
+
   const size_t buffer_pool_size = 10;
   const size_t k = 5;
 
@@ -139,6 +142,7 @@ TEST(BufferPoolManagerTest, DISABLED_SampleTest) {
   // Scenario: We should be able to fetch the data we wrote a while ago.
   page0 = bpm->FetchPage(0);
   ASSERT_NE(nullptr, page0);
+  std::cout << "page0 data:" << page0->GetData() << std::endl;
   EXPECT_EQ(0, strcmp(page0->GetData(), "Hello"));
 
   // Scenario: If we unpin page 0 and then make a new page, all the buffer pages should

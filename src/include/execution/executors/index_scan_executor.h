@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 #include "common/rid.h"
@@ -44,5 +45,11 @@ class IndexScanExecutor : public AbstractExecutor {
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+  // added
+  TableInfo *table_info_;
+  IndexInfo *index_info_;
+  HashTableIndexForTwoIntegerColumn *htable_;
+  std::vector<RID> rid_results_;
+  size_t cursor_{0};
 };
 }  // namespace bustub

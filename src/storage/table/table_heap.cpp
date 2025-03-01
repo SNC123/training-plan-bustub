@@ -93,6 +93,7 @@ void TableHeap::UpdateTupleMeta(const TupleMeta &meta, RID rid) {
   page->UpdateTupleMeta(meta, rid);
 }
 
+// this tells us the function of RID
 auto TableHeap::GetTuple(RID rid) -> std::pair<TupleMeta, Tuple> {
   auto page_guard = bpm_->FetchPageRead(rid.GetPageId());
   auto page = page_guard.As<TablePage>();

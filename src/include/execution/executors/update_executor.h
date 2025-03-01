@@ -24,6 +24,9 @@
 
 namespace bustub {
 
+// added
+using IndexInfos = std::vector<IndexInfo *>;
+
 /**
  * UpdateExecutor executes an update on a table.
  * Updated values are always pulled from a child.
@@ -66,5 +69,8 @@ class UpdateExecutor : public AbstractExecutor {
 
   /** The child executor to obtain value from */
   std::unique_ptr<AbstractExecutor> child_executor_;
+  // added
+  IndexInfos index_info_vector_;
+  bool is_updated_{false};
 };
 }  // namespace bustub
