@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "storage/page/b_plus_tree_page.h"
+#include "type/value.h"
 
 namespace bustub {
 
@@ -55,6 +56,11 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
+  // Added Helper methods
+  auto ValueAt(int index) const -> ValueType;
+  auto SetKVAt(int index, const KeyType &key, const ValueType &value) -> void;
+  auto InsertKV(KeyType key, ValueType value, KeyComparator key_comparator) -> bool;
+  auto GetValueByKey(KeyType key, std::vector<ValueType> *result, KeyComparator key_comparator) const -> bool;
 
   /**
    * @brief For test only return a string representing all keys in

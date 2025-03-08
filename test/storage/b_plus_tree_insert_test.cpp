@@ -75,12 +75,13 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   // create transaction
   auto *transaction = new Transaction(0);
 
-  std::vector<int64_t> keys = {1, 2, 3, 4, 5};
+  std::vector<int64_t> keys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
+    tree.Print(bpm);
   }
 
   std::vector<RID> rids;
@@ -137,6 +138,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
+    tree.Print(bpm);
   }
 
   std::vector<RID> rids;
